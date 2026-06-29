@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenBoulderMap — Chironico</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/node_modules/maplibre-gl/dist/maplibre-gl.css" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="map"></div>
+      <aside id="sidebar" class="hidden">
+        <button id="sidebar-close" title="Close">&times;</button>
+        <div id="sidebar-content"></div>
+      </aside>
+      <div id="attribution">
+        Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors
+        · Elevation: <a href="https://spacedata.copernicus.eu/web/cscda/data-access" target="_blank" rel="noopener">Copernicus DEM</a>
+      </div>
+      <div id="legend">
+        <div class="legend-title">Grade (Font)</div>
+        <div class="bar"></div>
+        <div class="legend-labels"><span>easy</span><span>hard</span></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

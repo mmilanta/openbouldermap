@@ -1,0 +1,175 @@
+schema_name: chironico
+schema_description: OpenBoulderMap — hiking basemap + bouldering features for Chironico (Ticino, CH), derived from OpenStreetMap and Copernicus DEM.
+attribution: '&copy; OpenStreetMap contributors · Copernicus DEM'
+
+sources:
+  osm:
+    type: osm
+    local_path: data/switzerland.osm.pbf
+  contours:
+    type: geojson
+    local_path: data/contours.geojson
+
+tag_mappings:
+  'climbing:grade:font': string
+  'climbing:start': string
+  'climbing:fa': string
+  'climbing:length': integer
+  'climbing:boulder': string
+
+layers:
+
+  # ---- landcover (wood / grass / scrub / rock / wetland / farmland) ----
+  # We emit the raw `natural` and `landuse` tags; the MapLibre style maps them
+  # to fill colors (see src/style.ts). This keeps tile generation dumb and
+  # makes rendering easy to tweak without regenerating tiles.
+  - id: landcover
+    features:
+      - source: osm
+        geometry: polygon
+        min_zoom: 9
+        include_when:
+          __any__:
+            - natural: [wood, forest, scrub, grassland, meadow, heath, wetland, bare_rock, rock, scree, fell, shingle, sand, beach]
+            - landuse: [forest, meadow, grass, farmland, orchard, vineyard, greenhouse_horticulture, allotments, cemetery, village_green, recreation_ground]
+        attributes:
+          - { key: natural, tag_value: natural }
+          - { key: landuse, tag_value: landuse }
+        tolerance: 0.5
+        tolerance_at_max_zoom: 0.125
+        min_size: 1
+        min_size_at_max_zoom: 0.25
+    tile_post_process:
+      merge_polygons:
+        min_area: 1
+        min_area_at_max_zoom: 0.25
+        tolerance: 0.5
+        tolerance_at_max_zoom: 0.125
+
+  # ---- water (polygons) ----
+  - id: water
+    features:
+      - source: osm
+        geometry: polygon
+        min_zoom: 8
+        include_when:
+          natural: [water, reservoir, dock, riverbank, bay, strait]
+        tolerance: 0.5
+        tolerance_at_max_zoom: 0.125
+        min_size: 1
+        min_size_at_max_zoom: 0.25
+    tile_post_process:
+      merge_polygons:
+        min_area: 1
+        min_area_at_max_zoom: 0.25
+        tolerance: 0.5
+        tolerance_at_max_zoom: 0.125
+
+  # ---- waterway (lines) ----
+  - id: waterway
+    features:
+      - source: osm
+        geometry: line
+        min_zoom: 9
+        include_when:
+          waterway: [stream, river, canal, ditch, drain, tidal_channel]
+        tolerance: 1
+        tolerance_at_max_zoom: 0.0625
+        min_size: 1
+        min_size_at_max_zoom: 0.125
+    tile_post_process:
+      merge_line_strings:
+        min_length: 1
+        min_length_at_max_zoom: 0.125
+        tolerance: 1
+        tolerance_at_max_zoom: 0.0625
+        buffer: 5
+
+  # ---- transportation: roads + hiking paths/tracks ----
+  # Emit raw `highway`; style splits roads vs paths.
+  - id: transportation
+    features:
+      - source: osm
+        geometry: line
+        min_zoom: 9
+        include_when:
+          highway: [motorway, trunk, primary, secondary, tertiary, unclassified, residential, motorway_link, trunk_link, primary_link, secondary_link, tertiary_link, living_street, service, track, path, footway, cycleway, steps, pedestrian]
+        attributes:
+          - { key: highway, tag_value: highway }
+        tolerance: 1
+        tolerance_at_max_zoom: 0.0625
+        min_size: 1
+        min_size_at_max_zoom: 0.125
+    tile_post_process:
+      merge_line_strings:
+        min_length: 1
+        min_length_at_max_zoom: 0.125
+        tolerance: 1
+        tolerance_at_max_zoom: 0.0625
+        buffer: 5
+
+  # ---- buildings (faint) ----
+  - id: buildings
+    features:
+      - source: osm
+        geometry: polygon
+        min_zoom: 14
+        include_when:
+          building: __any__
+        tolerance: 0.5
+        tolerance_at_max_zoom: 0.125
+        min_size: 0.5
+        min_size_at_max_zoom: 0.1
+    tile_post_process:
+      merge_polygons:
+        min_area: 0.5
+        min_area_at_max_zoom: 0.1
+        tolerance: 0.5
+        tolerance_at_max_zoom: 0.125
+
+  # ---- contours (from Copernicus DEM, see scripts/generate-contours.py) ----
+  - id: contours
+    features:
+      - source: contours
+        geometry: line
+        min_zoom: 11
+        attributes:
+          - { key: height, tag_value: height, type: integer }
+
+  # ---- boulders: climbing=boulder & natural=bare_rock & sport=climbing ----
+  - id: boulders
+    features:
+      - source: osm
+        geometry: polygon
+        min_zoom: 12
+        include_when:
+          __all__:
+            - climbing: boulder
+            - natural: [bare_rock, stone]
+            - sport: climbing
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: description, tag_value: description }
+          - { key: osm_type, value: '${ feature.osm_type }' }
+          - { key: osm_id, value: '${ feature.id }', type: long }
+
+  # ---- routes: climbing=route_bottom points ----
+  - id: routes
+    features:
+      - source: osm
+        geometry: point
+        min_zoom: 13
+        include_when:
+          climbing: route_bottom
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: 'climbing:grade:font', tag_value: 'climbing:grade:font' }
+          - { key: 'climbing:start', tag_value: 'climbing:start' }
+          - { key: description, tag_value: description }
+          - { key: 'climbing:fa', tag_value: 'climbing:fa' }
+          - { key: 'climbing:length', tag_value: 'climbing:length', type: integer }
+          - { key: url, tag_value: url }
+          - { key: wikimedia_commons, tag_value: wikimedia_commons }
+          - { key: image, tag_value: image }
+          - { key: osm_type, value: '${ feature.osm_type }' }
+          - { key: osm_id, value: '${ feature.id }', type: long }

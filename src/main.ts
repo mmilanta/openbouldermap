@@ -5,7 +5,7 @@ import { buildStyle } from './style'
 import { showRoute, showBoulder, hideSidebar } from './sidebar'
 
 // Register the pmtiles:// protocol so MapLibre can read our static archive.
-const protocol = new Protocol()
+const protocol = new Protocol({ metadata: true })
 maplibregl.addProtocol('pmtiles', protocol.tile as any)
 
 const map = new maplibregl.Map({
@@ -16,11 +16,15 @@ const map = new maplibregl.Map({
   minZoom: INITIAL_VIEW.minZoom,
   maxZoom: INITIAL_VIEW.maxZoom,
   hash: true,
+  preserveDrawingBuffer: true,
   attributionControl: { compact: true }
 })
 
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
+
+// Store for debugging
+;(window as any).__map = map
 
 map.on('load', () => {
   // Cursor: pointer over clickable route/boulder layers.

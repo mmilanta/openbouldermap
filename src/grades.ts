@@ -30,12 +30,10 @@ export function gradeColor(grade?: string | null): RGB {
 // Build a MapLibre `match` expression that maps the (uppercased) font grade
 // property to a color, defaulting to the unknown color.
 export function gradeColorExpression(propertyName: string) {
-  const inputs: string[] = []
-  const labels: RGB[] = []
+  const expr: any[] = ['match', ['upcase', ['get', propertyName]]]
   for (const [g, c] of Object.entries(GRADE_COLORS)) {
-    inputs.push(g)
-    labels.push(c)
+    expr.push(g, c)
   }
-  // match expects: [match, input, label1, output1, ..., default]
-  return ['match', ['upcase', ['get', propertyName]], ...inputs, ...labels, UNKNOWN_GRADE_COLOR]
+  expr.push(UNKNOWN_GRADE_COLOR)
+  return expr
 }

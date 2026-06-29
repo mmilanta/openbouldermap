@@ -10,9 +10,8 @@ const SRC = 'chironico'
 export function buildStyle(): StyleSpecification {
   return {
     version: 8,
-    glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
     sources: {
-      [SRC]: { type: 'vector', url: PMTILES_URL, attribution: '' }
+      [SRC]: { type: 'vector', url: PMTILES_URL, scheme: 'xyz', attribution: '' }
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': '#f5f3ee' } },
@@ -100,22 +99,6 @@ export function buildStyle(): StyleSpecification {
         'source-layer': 'contours',
         paint: { 'line-color': '#b08a5a', 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.4, 16, 0.9], 'line-opacity': 0.7 }
       },
-      {
-        id: 'contour-label',
-        type: 'symbol',
-        source: SRC,
-        'source-layer': 'contours',
-        minzoom: 13,
-        layout: {
-          'symbol-placement': 'line',
-          'text-field': '{height} m',
-          'text-size': 9,
-          'text-font': ['Noto Sans Regular'],
-          'text-max-angle': 30
-        },
-        paint: { 'text-color': '#7a5a36', 'text-halo-color': '#f5f3ee', 'text-halo-width': 1.5 }
-      },
-
       // --- boulders: dark-gray filled polygons ---
       {
         id: 'boulder',
@@ -124,21 +107,6 @@ export function buildStyle(): StyleSpecification {
         'source-layer': 'boulders',
         paint: { 'fill-color': '#4a4a4a', 'fill-opacity': 0.85, 'fill-outline-color': '#2b2b2b' }
       },
-      {
-        id: 'boulder-name',
-        type: 'symbol',
-        source: SRC,
-        'source-layer': 'boulders',
-        minzoom: 15,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': 10,
-          'text-font': ['Noto Sans Italic'],
-          'text-optional': true
-        },
-        paint: { 'text-color': '#222', 'text-halo-color': '#f5f3ee', 'text-halo-width': 1.5 }
-      },
-
       // --- routes: grade-colored dots, clickable ---
       {
         id: 'route',

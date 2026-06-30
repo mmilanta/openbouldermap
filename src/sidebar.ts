@@ -1,5 +1,8 @@
 // Sidebar rendering for selected route / boulder features.
 
+import { parsePath, renderPhotoBlock } from './photos'
+import { gradeColor } from './grades'
+
 function el(tag: string, cls: string, html: string): HTMLElement {
   const n = document.createElement(tag)
   if (cls) n.className = cls
@@ -46,7 +49,7 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
   const fa = pick(props, 'climbing:fa', 'fa')
   const len = pick(props, 'climbing:length')
   const url = pick(props, 'url')
-  const img = pick(props, 'wikimedia_commons', 'image', 'wikimedia_commons:path')
+  const img = pick(props, 'wikimedia_commons', 'image')
 
   const html: HTMLElement[] = []
   html.push(el('h1', 'route-name', name))
@@ -60,6 +63,14 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
     html.push(wrap)
   } else {
     html.push(el('div', 'grade-row', '<span class="grade-chip unknown">grade unknown</span>'))
+  }
+
+  // Photo + path overlay
+  if (img && img.startsWith('File:')) {
+    const pathStr = pick(props, 'wikimedia_commons:path')
+    const points = parsePath(pathStr)
+    const color = grade ? gradeColorFor(grade) : '#9e9e9e'
+    html.push(renderPhotoBlock(img, points.length > 0 ? [{ points, color, label: grade ?? undefined }] : []))
   }
 
   if (desc) html.push(row('Description', desc))
@@ -79,7 +90,15 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
 export function showBoulder(props: Record<string, any>, lon: number, lat: number): void {
   const name = pick(props, 'name') ?? 'Unnamed boulder'
   const desc = pick(props, 'description')
+  const wikiImg = pick(props, 'wikimedia_commons')
+
   const html: HTMLElement[] = [el('h1', 'route-name', name)]
+
+  // Boulder overview photo (no paths — route paths are shown when clicking routes)
+  if (wikiImg && wikiImg.startsWith('File:')) {
+    html.push(renderPhotoBlock(wikiImg, []))
+  }
+
   if (desc) html.push(row('Description', desc))
   html.push(el('div', 'muted', 'Boulder area (climbing=boulder). Route list is deferred to a later version.'))
   html.push(el('div', 'links', `<a href="${osmPermalink(lat, lon)}" target="_blank" rel="noopener">view on OSM</a> · <a href="${osmEditLink(lat, lon)}" target="_blank" rel="noopener">edit in iD</a>`))
@@ -97,8 +116,6 @@ function startStart(s: string): string {
   return m[s.toLowerCase()] ?? s
 }
 
-// avoid an import cycle just for one color lookup
-import { gradeColor } from './grades'
 function gradeColorFor(g: string): string {
   return gradeColor(g)
 }

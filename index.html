@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>OpenBoulderMap — Chironico</title>
+    <title>OpenBoulderMap — Switzerland</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/node_modules/maplibre-gl/dist/maplibre-gl.css" />
     <link rel="stylesheet" href="/src/style.css" />
@@ -18,10 +18,9 @@
         Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors
         · Elevation: <a href="https://spacedata.copernicus.eu/web/cscda/data-access" target="_blank" rel="noopener">Copernicus DEM</a>
       </div>
-      <div id="legend">
-        <div class="legend-title">Grade (Font)</div>
-        <div class="bar"></div>
-        <div class="legend-labels"><span>easy</span><span>hard</span></div>
+      <div id="theme-switcher">
+        <label for="theme-select" class="theme-label">🎨 Map style:</label>
+        <select id="theme-select"></select>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

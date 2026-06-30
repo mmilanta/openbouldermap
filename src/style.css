@@ -2,26 +2,28 @@
 
 html, body, #app { height: 100%; margin: 0; }
 
-#app { display: flex; position: relative; }
+#app { position: relative; height: 100%; }
 
 #map {
-  flex: 1;
+  width: 100%;
   height: 100%;
   background: #f5f3ee;
 }
 
 /* ---- sidebar ---- */
 #sidebar {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
   width: 340px;
   max-width: 90vw;
-  height: 100%;
   background: #fffdf8;
   border-left: 1px solid #d9d4c8;
   box-shadow: -2px 0 8px rgba(0, 0, 0, 0.08);
   padding: 16px 18px 24px;
   overflow-y: auto;
-  position: relative;
-  z-index: 5;
+  z-index: 10;
 }
 #sidebar.hidden { display: none; }
 
@@ -91,7 +93,7 @@ html, body, #app { height: 100%; margin: 0; }
   position: absolute;
   bottom: 0;
   left: 0;
-  right: 340px;
+  right: 350px;
   font-size: 11px;
   background: rgba(255, 255, 255, 0.7);
   padding: 2px 6px;
@@ -99,26 +101,51 @@ html, body, #app { height: 100%; margin: 0; }
 }
 #attribution a { color: #444; }
 #sidebar.hidden ~ #attribution { right: 0; }
+#sidebar.hidden ~ #theme-switcher { right: 10px; }
+#sidebar:not(.hidden) ~ #theme-switcher { right: 350px; }
 
-/* ---- legend ---- */
-#legend {
+/* ---- theme switcher ---- */
+#theme-switcher {
   position: absolute;
-  left: 10px;
+  right: 10px;
   bottom: 24px;
   background: rgba(255, 255, 255, 0.85);
   border-radius: 6px;
   padding: 6px 8px 5px;
   font-size: 11px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.legend-title { font-weight: 700; margin-bottom: 3px; }
-#legend .bar {
-  height: 8px;
-  width: 140px;
+.theme-label { white-space: nowrap; color: #555; }
+#theme-select {
+  font-size: 11px;
+  border: 1px solid #ccc;
   border-radius: 4px;
-  background: linear-gradient(to right,
-    #2e7d32, #43a047, #7cb342, #c0ca33, #fdd835, #ffb300, #fb8c00, #f4511e, #e53935, #b71c1c);
+  padding: 2px 4px;
+  background: #fff;
+  cursor: pointer;
 }
-.legend-labels { display: flex; justify-content: space-between; margin-top: 1px; color: #666; }
+
+/* ---- photo block ---- */
+.photo-block {
+  position: relative;
+  margin: 0 -18px 14px;
+  line-height: 0;
+}
+.photo-block .photo-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.photo-block .photo-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
 
 .maplibregl-ctrl-attrib { font-size: 10px; }

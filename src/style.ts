@@ -4,8 +4,8 @@ import { gradeColorExpression, UNKNOWN_GRADE_COLOR } from './grades'
 
 // All layers come from a single self-hosted PMTiles source whose source-layers
 // are produced by scripts/schema.yml (planetiler):
-//   landcover, water, waterway, transportation, buildings, contours, boulders, routes
-const SRC = 'chironico'
+//   landcover, water, waterway, transportation, boundaries, buildings, boulders, routes
+const SRC = 'switzerland'
 
 export function buildStyle(): StyleSpecification {
   return {
@@ -68,37 +68,76 @@ export function buildStyle(): StyleSpecification {
         paint: { 'fill-color': '#e6e2da', 'fill-opacity': 0.6 }
       },
 
-      // --- transportation: roads + hiking paths/tracks (schema emits `highway`) ---
+      // --- boundaries: admin borders (dashed) ---
       {
-        id: 'road',
+        id: 'border',
+        type: 'line',
+        source: SRC,
+        'source-layer': 'boundaries',
+        minzoom: 6,
+        paint: {
+          'line-color': '#9b8c7c',
+          'line-dasharray': [4, 3],
+          'line-width': ['interpolate', ['linear'], ['zoom'],
+            6, 0.4,
+            10, 0.8,
+            14, 1.2
+          ]
+        }
+      },
+
+      // --- transportation: road hierarchy (separate layers so each has its own minzoom) ---
+      {
+        id: 'highway-major',
         type: 'line',
         source: SRC,
         'source-layer': 'transportation',
-        filter: ['in', ['get', 'highway'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link', 'living_street', 'service']]],
-        paint: { 'line-color': '#cfcabd', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.3, 16, 2] }
+        minzoom: 7,
+        filter: ['in', ['get', 'highway'], ['literal', ['motorway', 'trunk', 'primary']]],
+        paint: {
+          'line-color': '#cfcabd',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 7, 1, 10, 2, 14, 3.5]
+        }
+      },
+      {
+        id: 'highway-secondary',
+        type: 'line',
+        source: SRC,
+        'source-layer': 'transportation',
+        minzoom: 9,
+        filter: ['in', ['get', 'highway'], ['literal', ['secondary', 'tertiary', 'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link']]],
+        paint: {
+          'line-color': '#d4cec2',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 2]
+        }
+      },
+      {
+        id: 'highway-local',
+        type: 'line',
+        source: SRC,
+        'source-layer': 'transportation',
+        minzoom: 12,
+        filter: ['in', ['get', 'highway'], ['literal', ['unclassified', 'residential', 'living_street', 'service']]],
+        paint: {
+          'line-color': '#d8d3c9',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.4, 16, 1.5]
+        }
       },
       {
         id: 'path',
         type: 'line',
         source: SRC,
         'source-layer': 'transportation',
+        minzoom: 13,
         filter: ['in', ['get', 'highway'], ['literal', ['path', 'footway', 'track', 'cycleway', 'steps', 'pedestrian']]],
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': '#9a6b3f',
           'line-dasharray': [1, 0.4],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 14, 1.2, 17, 2.4]
+          'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.6, 15, 1.2, 17, 2.4]
         }
       },
 
-      // --- contours ---
-      {
-        id: 'contour',
-        type: 'line',
-        source: SRC,
-        'source-layer': 'contours',
-        paint: { 'line-color': '#b08a5a', 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.4, 16, 0.9], 'line-opacity': 0.7 }
-      },
       // --- boulders: dark-gray filled polygons ---
       {
         id: 'boulder',

@@ -1,14 +1,11 @@
-schema_name: chironico
-schema_description: OpenBoulderMap — hiking basemap + bouldering features for Chironico (Ticino, CH), derived from OpenStreetMap and Copernicus DEM.
-attribution: '&copy; OpenStreetMap contributors · Copernicus DEM'
+schema_name: switzerland
+schema_description: 'OpenBoulderMap — hiking basemap + bouldering features for Switzerland, derived from OpenStreetMap.'
+attribution: '&copy; OpenStreetMap contributors'
 
 sources:
   osm:
     type: osm
     local_path: data/switzerland.osm.pbf
-  contours:
-    type: geojson
-    local_path: data/contours.geojson
 
 tag_mappings:
   'climbing:grade:font': string
@@ -16,6 +13,10 @@ tag_mappings:
   'climbing:fa': string
   'climbing:length': integer
   'climbing:boulder': string
+  wikimedia_commons: string
+  'wikimedia_commons:path': string
+  'wikimedia_commons:2': string
+  'wikimedia_commons:2:path': string
 
 layers:
 
@@ -85,6 +86,19 @@ layers:
         tolerance_at_max_zoom: 0.0625
         buffer: 5
 
+  # ---- boundaries (admin borders) ----
+  - id: boundaries
+    features:
+      - source: osm
+        geometry: line
+        min_zoom: 5
+        include_when:
+          boundary: administrative
+        attributes:
+          - { key: admin_level, tag_value: admin_level, type: integer }
+        tolerance: 5
+        tolerance_at_max_zoom: 0.5
+
   # ---- transportation: roads + hiking paths/tracks ----
   # Emit raw `highway`; style splits roads vs paths.
   - id: transportation
@@ -127,15 +141,6 @@ layers:
         tolerance: 0.5
         tolerance_at_max_zoom: 0.125
 
-  # ---- contours (from Copernicus DEM, see scripts/generate-contours.py) ----
-  - id: contours
-    features:
-      - source: contours
-        geometry: line
-        min_zoom: 11
-        attributes:
-          - { key: height, tag_value: height, type: integer }
-
   # ---- boulders: climbing=boulder & natural=bare_rock & sport=climbing ----
   - id: boulders
     features:
@@ -150,6 +155,7 @@ layers:
         attributes:
           - { key: name, tag_value: name }
           - { key: description, tag_value: description }
+          - { key: wikimedia_commons, tag_value: wikimedia_commons }
           - { key: osm_type, value: '${ feature.osm_type }' }
           - { key: osm_id, value: '${ feature.id }', type: long }
 
@@ -170,6 +176,7 @@ layers:
           - { key: 'climbing:length', tag_value: 'climbing:length', type: integer }
           - { key: url, tag_value: url }
           - { key: wikimedia_commons, tag_value: wikimedia_commons }
+          - { key: 'wikimedia_commons:path', tag_value: 'wikimedia_commons:path' }
           - { key: image, tag_value: image }
           - { key: osm_type, value: '${ feature.osm_type }' }
           - { key: osm_id, value: '${ feature.id }', type: long }

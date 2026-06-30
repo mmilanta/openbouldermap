@@ -3,6 +3,7 @@ import { Protocol } from 'pmtiles'
 import { INITIAL_VIEW } from './config'
 import { buildStyle } from './style'
 import { showRoute, showBoulder, hideSidebar } from './sidebar'
+import { THEMES, applyTheme } from './themes'
 
 // Register the pmtiles:// protocol so MapLibre can read our static archive.
 const protocol = new Protocol({ metadata: true })
@@ -33,6 +34,19 @@ map.on('load', () => {
     map.on('mouseenter', l, () => (map.getCanvas().style.cursor = 'pointer'))
     map.on('mouseleave', l, () => (map.getCanvas().style.cursor = ''))
   }
+})
+
+// --- Theme switcher ---
+const themeSelect = document.getElementById('theme-select') as HTMLSelectElement
+for (const t of THEMES) {
+  const opt = document.createElement('option')
+  opt.value = t.name
+  opt.textContent = t.name
+  themeSelect.appendChild(opt)
+}
+themeSelect.addEventListener('change', () => {
+  const theme = THEMES.find(t => t.name === themeSelect.value)
+  if (theme) applyTheme(map, theme)
 })
 
 map.on('click', (e) => {

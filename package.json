@@ -8,7 +8,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 4173"
+    "preview": "vite preview --port 4173",
+    "serve-tiles": "npx tsx scripts/serve-tiles.ts 8081",
+    "themes-json": "npx tsx scripts/generate-themes-json.ts"
   },
   "devDependencies": {
     "playwright": "^1.61.1",

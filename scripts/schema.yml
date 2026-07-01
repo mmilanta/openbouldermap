@@ -122,6 +122,51 @@ layers:
         tolerance_at_max_zoom: 0.0625
         buffer: 5
 
+  # ---- places (city, canton, country labels) ----
+  # Each place type gets its own min_zoom so low-zoom tiles are not bloated.
+  - id: places
+    features:
+      - source: osm
+        geometry: point
+        min_zoom: 3
+        include_when:
+          place: [country]
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: place, tag_value: place }
+      - source: osm
+        geometry: point
+        min_zoom: 5
+        include_when:
+          place: [state]
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: place, tag_value: place }
+      - source: osm
+        geometry: point
+        min_zoom: 7
+        include_when:
+          place: [city]
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: place, tag_value: place }
+      - source: osm
+        geometry: point
+        min_zoom: 9
+        include_when:
+          place: [town]
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: place, tag_value: place }
+      - source: osm
+        geometry: point
+        min_zoom: 11
+        include_when:
+          place: [village]
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: place, tag_value: place }
+
   # ---- buildings (faint) ----
   - id: buildings
     features:

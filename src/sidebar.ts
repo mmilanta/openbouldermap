@@ -1,6 +1,6 @@
 // Sidebar rendering for selected route / boulder features.
 
-import { parsePath, renderPhotoBlock } from './photos'
+import { parsePath, renderPhotoBlock, createPathEditor, stringifyPath, PathPoint } from './photos'
 import { gradeColor } from './grades'
 
 function el(tag: string, cls: string, html: string): HTMLElement {
@@ -68,9 +68,15 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
   // Photo + path overlay
   if (img && img.startsWith('File:')) {
     const pathStr = pick(props, 'wikimedia_commons:path')
-    const points = parsePath(pathStr)
+    const existingPoints = parsePath(pathStr)
     const color = grade ? gradeColorFor(grade) : '#9e9e9e'
-    html.push(renderPhotoBlock(img, points.length > 0 ? [{ points, color, label: grade ?? undefined }] : []))
+    html.push(renderPhotoBlock(img, existingPoints.length > 0 ? [{ points: existingPoints, color, label: grade ?? undefined }] : []))
+    // Edit button + result string
+    html.push(buildPathControls(img, existingPoints, (newPoints) => {
+      showRoute({ ...props, 'wikimedia_commons:path': stringifyPath(newPoints) }, lon, lat)
+    }, () => {
+      showRoute(props, lon, lat)
+    }))
   }
 
   if (desc) html.push(row('Description', desc))
@@ -118,4 +124,70 @@ function startStart(s: string): string {
 
 function gradeColorFor(g: string): string {
   return gradeColor(g)
+}
+
+// ---------------------------------------------------------------------------
+//  Path editor controls  (Edit button, serialized result, Copy, iD link)
+// ---------------------------------------------------------------------------
+
+function buildPathControls(
+  imageFilename: string,
+  existingPoints: PathPoint[],
+  onPathChanged: (newPoints: PathPoint[]) => void,
+  onCancel: () => void,
+): HTMLElement {
+  const wrap = document.createElement('div')
+  wrap.className = 'path-controls'
+
+  // Edit button
+  const editBtn = document.createElement('button')
+  editBtn.className = 'path-edit-btn'
+  editBtn.textContent = existingPoints.length > 0 ? '✎ Edit path' : '+ Add path'
+  editBtn.addEventListener('click', () => {
+    createPathEditor(imageFilename, existingPoints, {
+      onDone: onPathChanged,
+      onCancel,
+    })
+  })
+  wrap.appendChild(editBtn)
+
+  // Show serialized path string if it exists
+  if (existingPoints.length > 0) {
+    const str = stringifyPath(existingPoints)
+    const field = document.createElement('div')
+    field.className = 'path-result'
+
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.className = 'path-result-input'
+    input.value = str
+    input.readOnly = true
+    input.title = 'Copy this value into the wikimedia_commons:path tag on OpenStreetMap'
+    field.appendChild(input)
+
+    const copyBtn = document.createElement('button')
+    copyBtn.className = 'path-copy-btn'
+    copyBtn.textContent = 'Copy'
+    copyBtn.addEventListener('click', () => {
+      const fullTag = `wikimedia_commons:path=${str}`
+      navigator.clipboard.writeText(fullTag).then(() => {
+        copyBtn.textContent = 'Copied!'
+        setTimeout(() => { copyBtn.textContent = 'Copy' }, 1500)
+      })
+    })
+    field.appendChild(copyBtn)
+
+    wrap.appendChild(field)
+
+    // iD editor link
+    const hint = document.createElement('div')
+    hint.className = 'path-hint'
+    hint.innerHTML = `
+      Paste the value above into the <code>wikimedia_commons:path</code> tag on
+      <a href="https://www.openstreetmap.org/edit?editor=id" target="_blank" rel="noopener">OpenStreetMap iD editor</a>
+    `
+    wrap.appendChild(hint)
+  }
+
+  return wrap
 }

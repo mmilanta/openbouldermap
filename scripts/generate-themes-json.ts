@@ -47,7 +47,7 @@ const style = {
       maxzoom: 16
     }
   },
-  glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
   layers: [
     { id: 'background', type: 'background', paint: { 'background-color': '#f5f3ee' } },
 
@@ -126,44 +126,42 @@ const style = {
 
     {
       id: 'place-country', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 4,
+      minzoom: 4, maxzoom: 24,
       filter: ['==', ['get', 'place'], 'country'],
       layout: {
         'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Bold'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 10, 18],
-        'text-transform': 'uppercase',
-        'text-letter-spacing': 0.12
+        'text-size': ['interpolate', ['linear'], ['zoom'], 4, 12, 10, 20]
       },
       paint: {
-        'text-color': '#444',
+        'text-color': '#333',
         'text-halo-color': '#f5f3ee',
         'text-halo-width': 2
       }
     },
     {
       id: 'place-canton', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 6,
+      minzoom: 6, maxzoom: 24,
       filter: ['==', ['get', 'place'], 'state'],
       layout: {
         'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Bold'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 6, 9, 11, 14]
+        'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 11, 15]
       },
       paint: {
-        'text-color': '#555',
+        'text-color': '#444',
         'text-halo-color': '#f5f3ee',
         'text-halo-width': 1.5
       }
     },
     {
       id: 'place-city', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 8,
+      minzoom: 8, maxzoom: 24,
       filter: ['==', ['get', 'place'], 'city'],
       layout: {
         'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Bold'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 12, 16]
+        'text-size': ['interpolate', ['linear'], ['zoom'], 8, 11, 12, 16]
       },
       paint: {
         'text-color': '#222',
@@ -173,12 +171,12 @@ const style = {
     },
     {
       id: 'place-town', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 10,
+      minzoom: 10, maxzoom: 24,
       filter: ['==', ['get', 'place'], 'town'],
       layout: {
         'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Regular'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 10, 9, 14, 14]
+        'text-size': ['interpolate', ['linear'], ['zoom'], 10, 10, 14, 14]
       },
       paint: {
         'text-color': '#333',
@@ -188,12 +186,12 @@ const style = {
     },
     {
       id: 'place-village', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 12,
+      minzoom: 12, maxzoom: 24,
       filter: ['==', ['get', 'place'], 'village'],
       layout: {
         'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Regular'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 12, 9, 15, 12]
+        'text-size': ['interpolate', ['linear'], ['zoom'], 12, 10, 15, 13]
       },
       paint: {
         'text-color': '#444',

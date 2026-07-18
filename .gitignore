@@ -2,6 +2,7 @@ node_modules
 dist
 data
 tiles/*.pmtiles
+!tiles/climbing.pmtiles
 tiles/*.mvt
 planetiler.jar
 *.log

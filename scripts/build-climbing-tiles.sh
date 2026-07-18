@@ -41,11 +41,11 @@ mkdir -p data tiles
 echo "==> Filtering climbing tags from: $SOURCE"
 if [[ "$SOURCE" == http://* || "$SOURCE" == https://* ]]; then
   echo "     Streaming directly from URL (no full download needed) ..."
-  osmium tags-filter -o "$FILTERED" "$SOURCE" $FILTER_TAGS
+  osmium tags-filter -o "$FILTERED" --overwrite "$SOURCE" $FILTER_TAGS
 else
   [ -f "$SOURCE" ] || { echo "Error: PBF not found at $SOURCE"; exit 1; }
   ORIG_SIZE=$(du -h "$SOURCE" | cut -f1)
-  osmium tags-filter -o "$FILTERED" "$SOURCE" $FILTER_TAGS
+  osmium tags-filter -o "$FILTERED" --overwrite "$SOURCE" $FILTER_TAGS
   echo "     Original: $ORIG_SIZE  →  Filtered: $(du -h "$FILTERED" | cut -f1)"
 fi
 

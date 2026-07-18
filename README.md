@@ -1,61 +1,76 @@
 # OpenBoulderMap
 
-A bouldering map built on OpenStreetMap data. OSM is the **source of truth**; the
-app only renders a derived, regenerable snapshot (PMTiles). v1 targets a single
-area — **Chironico, Ticino, Switzerland** — as a vertical slice.
+A worldwide bouldering map built on OpenStreetMap data. OSM is the **source of
+truth**; the app only renders a derived, regenerable snapshot (PMTiles).
 
-See [`requirements.md`](requirements.md) for the full spec and
-[`idea.md`](idea.md) for the original brainstorm.
+- **Basemap**: vector tiles from [OpenFreeMap](https://openfreemap.org/) (free, no API key).
+- **Climbing features**: tiny self-hosted PMTiles (boulders + routes only, a few MB globally).
+- **Frontend**: Vite + TypeScript + MapLibre GL JS, reading climbing PMTiles via the `pmtiles` protocol.
+
+See [`requirements.md`](requirements.md) for the original spec and
+[`idea.md`](idea.md) for the brainstorm.
 
 ## Stack
 
-- **Tile generation**: [planetiler](https://github.com/onthegomap/planetiler)
-  (custom-map schema in `scripts/schema.yml`) → `tiles/chironico.pmtiles`.
-- **Contours**: Copernicus DEM (GLO-30) → `scripts/generate-contours.py` →
-  `data/contours.geojson`, merged into the same PMTiles.
-- **Frontend**: Vite + TypeScript + MapLibre GL JS, reading the PMTiles via the
-  `pmtiles` protocol (no server, static file hosting).
+- **Basemap**: [OpenFreeMap](https://openfreemap.org/) — Planetiler-generated vector tiles (landcover, water, roads, paths, places, buildings).
+- **Climbing tile generation**: [planetiler](https://github.com/onthegomap/planetiler) (custom-map schema in `scripts/schema.yml`) → `tiles/climbing.pmtiles`.
+  Input: an OSM PBF filtered with `osmium tags-filter` to only climbing-tagged objects.
+- **Frontend**: Vite + TypeScript + MapLibre GL JS. Two sources: remote basemap + local climbing PMTiles.
 
 ## Prerequisites
 
 - Java ≥ 17 (planetiler)
-- [`uv`](https://docs.astral.sh/uv/) (for the contour script's ephemeral env)
+- [`osmium`](https://osmcode.org/osmium-tool/) (to filter OSM extracts)
 - Node ≥ 18 (Vite)
-- Inputs already vendored in the repo (gitignored):
-  - `planetiler.jar` (at repo root)
-  - `data/switzerland.osm.pbf` (Geofabrik Switzerland extract)
-  - `data/dem_n46e008.tif` (Copernicus DEM tile covering lon 8–9, lat 46–47)
+- Inputs (not vendored):
+  - `planetiler.jar` (at repo root, see [planetiler releases](https://github.com/onthegomap/planetiler/releases))
+  - An OSM PBF: the full planet (~70 GB) or a continent extract from [Geofabrik](https://download.geofabrik.de/)
 
 ## Build & run
 
 ```bash
-# 1. (re)generate the PMTiles from OSM + DEM — one command
-bash scripts/build-tiles.sh
+# 1. Build the climbing PMTiles from an OSM PBF
+#    Download the planet (or a continent extract) first:
+#      curl -Lo data/planet.osm.pbf https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf
+#    Or grab a continent:
+#      curl -Lo data/europe.osm.pbf https://download.geofabrik.de/europe-latest.osm.pbf
+bash scripts/build-climbing-tiles.sh data/planet.osm.pbf     # or path to your PBF
 
-# 2. start the app
+# 2. Start the app
 npm install        # first time only
 npm run dev        # http://localhost:5173
 ```
 
-`npm run build` + `npm run preview` serves the production bundle; copy
-`tiles/chironico.pmtiles` into `dist/tiles/` for a fully self-contained preview.
+`npm run build` + `npm run preview` serves the production bundle.
 
-## What you see
+## How it works
 
-- A hiking-style basemap (contours, paths, water, landcover, faint buildings).
-- **Boulders**: dark-gray filled polygons (`climbing=boulder` +
-  `natural∈{bare_rock,stone}` + `sport=climbing`).
-- **Routes**: grade-colored dots (`climbing=route_bottom`), Font green→red.
-- Click a route → sidebar with name, grade, start, description, FA, links.
-- Click a boulder → sidebar with its name/description.
-- OSM + Copernicus DEM attribution in the corner.
+1. **`scripts/build-climbing-tiles.sh`** filters the OSM PBF with `osmium tags-filter … climbing`, keeping only objects with any `climbing` tag. The filtered PBF is tiny (a few MB).
+2. Planetiler processes the filtered PBF with `scripts/schema.yml` (only `boulders` and `routes` layers) and writes `tiles/climbing.pmtiles`.
+3. The frontend loads **two vector sources**:
+   - `basemap` — `https://tiles.openfreemap.org/planet/{z}/{x}/{y}.mvt` (OpenFreeMap CDN, free)
+   - `climbing` — `pmtiles://…/tiles/climbing.pmtiles` (local static file)
+4. MapLibre renders basemap layers first, then boulder polygons and route dots on top.
 
-## Data reality (Chironico, 2026-06 extract)
+## Data model
 
-OSM is sparse here: 13 boulder polygons, 14 `route_bottom` points (all in
-Sector 10), and 227 boulder **points** without route/grade info (not surfaced in
-v1 — see `requirements.md` §3.6). This is faithful to OSM, not a bug.
+### Boulders (areas)
+`climbing=boulder` AND `natural∈{bare_rock,stone}` AND `sport=climbing` → dark-gray filled polygon.
+
+### Routes (points)
+`climbing=route_bottom` → grade-colored dot (Font scale, green→red).
+
+## OSM data coverage
+
+Climbing features depend on OSM contributors mapping them. Popular bouldering
+destinations in Europe (Fontainebleau, Chironico, Magic Wood, Albarracín, etc.)
+are well-mapped. Coverage elsewhere varies.
+
+The planet PBF filtering step is fast — `osmium tags-filter` streams through
+the file and outputs only climbing-tagged features. The resulting filtered PBF
+is tiny enough that planetiler processes it in seconds.
 
 ## License
 
-MIT. Data © OpenStreetMap contributors (ODbL); DEM © Copernicus DEM.
+MIT. Data © OpenStreetMap contributors (ODbL).
+Basemap tiles from OpenFreeMap (OSM-derived, ODbL-compliant).

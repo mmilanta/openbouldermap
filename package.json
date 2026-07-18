@@ -1,14 +1,15 @@
 {
   "name": "openbouldermap",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Bouldering map on top of OpenStreetMap data (Approach 3: self-hosted PMTiles).",
+  "description": "Worldwide bouldering map — basemap from OpenFreeMap, climbing data from self-hosted PMTiles.",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 4173",
+    "build-tiles": "bash scripts/build-climbing-tiles.sh",
     "serve-tiles": "npx tsx scripts/serve-tiles.ts 8081",
     "themes-json": "npx tsx scripts/generate-themes-json.ts"
   },

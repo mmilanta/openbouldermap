@@ -2,9 +2,13 @@
  * Generates themes.json — one complete MapLibre style for the Default theme.
  * Run: npx tsx scripts/generate-themes-json.ts
  *
- * To preview in Maputnik, first serve tiles locally:
- *   npm run serve-tiles         # starts pmtiles server on :8081
- * Then in Maputnik, the source will already point to localhost:8081.
+ * To preview in Maputnik:
+ *   1. npm run serve-tiles         # starts pmtiles server on :8081 (climbing features)
+ *   2. In Maputnik, add a second source for OpenFreeMap basemap:
+ *      Source ID: basemap
+ *      Type: Vector (XYZ URLs)
+ *      URL: https://tiles.openfreemap.org/planet/{z}/{x}/{y}.mvt
+ *      Min Zoom: 0, Max Zoom: 14
  */
 import { writeFileSync } from 'fs'
 import { GRADE_COLORS, UNKNOWN_GRADE_COLOR } from '../src/grades'
@@ -19,49 +23,67 @@ function gradeMatchExpr(): any[] {
   return expr
 }
 
-const SRC = 'switzerland'
-const LANDCOVER_EXPR = [
-  'case',
-  ['in', ['get', 'natural'], ['literal', ['wood', 'forest']]], '#dfead8',
-  ['in', ['get', 'landuse'], ['literal', ['forest']]], '#dfead8',
-  ['==', ['get', 'natural'], 'scrub'], '#e6eedd',
-  ['in', ['get', 'natural'], ['literal', ['grassland', 'meadow']]], '#eef3e6',
-  ['in', ['get', 'landuse'], ['literal', ['meadow', 'grass', 'village_green', 'recreation_ground', 'cemetery']]], '#eef3e6',
-  ['==', ['get', 'natural'], 'heath'], '#e7eede',
-  ['==', ['get', 'natural'], 'wetland'], '#e3e9d5',
-  ['in', ['get', 'natural'], ['literal', ['bare_rock', 'rock', 'stone']]], '#d9d6cf',
-  ['in', ['get', 'natural'], ['literal', ['scree', 'fell', 'shingle', 'sand', 'beach']]], '#ddd9d2',
-  ['in', ['get', 'landuse'], ['literal', ['farmland', 'orchard', 'vineyard', 'greenhouse_horticulture', 'allotments']]], '#efe9d8',
-  '#eae7e0'
-]
-
 const style = {
   version: 8,
-  name: 'OpenBoulderMap — Switzerland',
-  // Standard XYZ tiles served by `pmtiles serve` — Maputnik understands this.
+  name: 'OpenBoulderMap — climbing features',
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
   sources: {
-    switzerland: {
+    // Climbing features from local pmtiles server
+    climbing: {
       type: 'vector',
       tiles: [`${TILE_SERVER}/{z}/{x}/{y}`],
-      minzoom: 11,
+      minzoom: 0,
       maxzoom: 16
+    },
+    // Basemap from OpenFreeMap — add manually in Maputnik if needed
+    basemap: {
+      type: 'vector',
+      tiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.mvt'],
+      minzoom: 0,
+      maxzoom: 14
     }
   },
-  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
   layers: [
+    // ─── Basemap layers (OpenFreeMap) ──────────────────────────────
     { id: 'background', type: 'background', paint: { 'background-color': '#f5f3ee' } },
 
     {
-      id: 'landcover', type: 'fill', source: SRC, 'source-layer': 'landcover',
-      paint: { 'fill-color': LANDCOVER_EXPR, 'fill-opacity': 0.9 }
+      id: 'landcover', type: 'fill', source: 'basemap', 'source-layer': 'landcover',
+      paint: {
+        'fill-color': [
+          'match', ['get', 'class'],
+          'wood', '#dfead8', 'forest', '#dfead8', 'scrub', '#e6eedd',
+          'grassland', '#eef3e6', 'meadow', '#eef3e6', 'heath', '#e7eede',
+          'wetland', '#e3e9d5', 'bare_rock', '#d9d6cf', 'rock', '#d9d6cf',
+          'sand', '#ddd9d2', 'scree', '#ddd9d2', 'fell', '#ddd9d2',
+          'beach', '#ddd9d2',
+          '#eae7e0'
+        ],
+        'fill-opacity': 0.9
+      }
+    },
+    {
+      id: 'landuse', type: 'fill', source: 'basemap', 'source-layer': 'landuse',
+      paint: {
+        'fill-color': [
+          'match', ['get', 'class'],
+          'farmland', '#efe9d8', 'orchard', '#efe9d8', 'vineyard', '#efe9d8',
+          'greenhouse_horticulture', '#efe9d8', 'allotments', '#efe9d8',
+          'forest', '#dfead8', 'meadow', '#eef3e6', 'grass', '#eef3e6',
+          'village_green', '#eef3e6', 'recreation_ground', '#eef3e6',
+          'cemetery', '#eef3e6',
+          '#eae7e0'
+        ],
+        'fill-opacity': 0.9
+      }
     },
 
     {
-      id: 'water', type: 'fill', source: SRC, 'source-layer': 'water',
+      id: 'water', type: 'fill', source: 'basemap', 'source-layer': 'water',
       paint: { 'fill-color': '#bfe0f0' }
     },
     {
-      id: 'waterway', type: 'line', source: SRC, 'source-layer': 'waterway',
+      id: 'waterway', type: 'line', source: 'basemap', 'source-layer': 'waterway',
       paint: {
         'line-color': '#bfe0f0',
         'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.6, 16, 2.5]
@@ -69,13 +91,14 @@ const style = {
     },
 
     {
-      id: 'buildings', type: 'fill', source: SRC, 'source-layer': 'buildings',
+      id: 'buildings', type: 'fill', source: 'basemap', 'source-layer': 'building',
       paint: { 'fill-color': '#e6e2da', 'fill-opacity': 0.6 }
     },
 
     {
-      id: 'border', type: 'line', source: SRC, 'source-layer': 'boundaries',
+      id: 'border', type: 'line', source: 'basemap', 'source-layer': 'boundary',
       minzoom: 6,
+      filter: ['<=', ['to-number', ['get', 'admin_level']], 4],
       paint: {
         'line-color': '#9b8c7c',
         'line-dasharray': [4, 3],
@@ -84,38 +107,36 @@ const style = {
     },
 
     {
-      id: 'highway-major', type: 'line', source: SRC, 'source-layer': 'transportation',
+      id: 'highway-major', type: 'line', source: 'basemap', 'source-layer': 'transportation',
       minzoom: 7,
-      filter: ['in', ['get', 'highway'], ['literal', ['motorway', 'trunk', 'primary']]],
+      filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
       paint: {
         'line-color': '#cfcabd',
         'line-width': ['interpolate', ['linear'], ['zoom'], 7, 1, 10, 2, 14, 3.5]
       }
     },
     {
-      id: 'highway-secondary', type: 'line', source: SRC, 'source-layer': 'transportation',
+      id: 'highway-secondary', type: 'line', source: 'basemap', 'source-layer': 'transportation',
       minzoom: 9,
-      filter: ['in', ['get', 'highway'], ['literal', ['secondary', 'tertiary', 'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link']]],
+      filter: ['in', ['get', 'class'], ['literal', ['secondary', 'tertiary', 'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link']]],
       paint: {
         'line-color': '#d4cec2',
         'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 2]
       }
     },
     {
-      id: 'highway-local', type: 'line', source: SRC, 'source-layer': 'transportation',
+      id: 'highway-local', type: 'line', source: 'basemap', 'source-layer': 'transportation',
       minzoom: 12,
-      filter: ['in', ['get', 'highway'], ['literal', ['unclassified', 'residential', 'living_street', 'service']]],
+      filter: ['in', ['get', 'class'], ['literal', ['unclassified', 'residential', 'living_street', 'service']]],
       paint: {
         'line-color': '#d8d3c9',
         'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.4, 16, 1.5]
       }
     },
     {
-      id: 'path', type: 'line', source: SRC, 'source-layer': 'transportation',
+      id: 'path', type: 'line', source: 'basemap', 'source-layer': 'transportation',
       minzoom: 13,
-      filter: ['in', ['get', 'highway'], ['literal', [
-        'path', 'footway', 'track', 'cycleway', 'steps', 'pedestrian'
-      ]]],
+      filter: ['in', ['get', 'class'], ['literal', ['path', 'footway', 'track', 'cycleway', 'steps', 'pedestrian']]],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
         'line-color': '#9a6b3f',
@@ -125,92 +146,68 @@ const style = {
     },
 
     {
-      id: 'place-country', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 4, maxzoom: 24,
-      filter: ['==', ['get', 'place'], 'country'],
+      id: 'place-country', type: 'symbol', source: 'basemap', 'source-layer': 'place',
+      minzoom: 3, maxzoom: 24,
+      filter: ['==', ['get', 'class'], 'country'],
       layout: {
-        'text-field': ['get', 'name'],
+        'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
         'text-font': ['Noto Sans Bold'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 4, 12, 10, 20]
+        'text-size': ['interpolate', ['linear'], ['zoom'], 3, 12, 10, 20]
       },
-      paint: {
-        'text-color': '#333',
-        'text-halo-color': '#f5f3ee',
-        'text-halo-width': 2
-      }
+      paint: { 'text-color': '#333', 'text-halo-color': '#f5f3ee', 'text-halo-width': 2 }
     },
     {
-      id: 'place-canton', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 6, maxzoom: 24,
-      filter: ['==', ['get', 'place'], 'state'],
+      id: 'place-canton', type: 'symbol', source: 'basemap', 'source-layer': 'place',
+      minzoom: 5, maxzoom: 24,
+      filter: ['==', ['get', 'class'], 'state'],
       layout: {
-        'text-field': ['get', 'name'],
+        'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
         'text-font': ['Noto Sans Bold'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 6, 10, 11, 15]
+        'text-size': ['interpolate', ['linear'], ['zoom'], 5, 10, 11, 15]
       },
-      paint: {
-        'text-color': '#444',
-        'text-halo-color': '#f5f3ee',
-        'text-halo-width': 1.5
-      }
+      paint: { 'text-color': '#444', 'text-halo-color': '#f5f3ee', 'text-halo-width': 1.5 }
     },
     {
-      id: 'place-city', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 8, maxzoom: 24,
-      filter: ['==', ['get', 'place'], 'city'],
+      id: 'place-city', type: 'symbol', source: 'basemap', 'source-layer': 'place',
+      minzoom: 7, maxzoom: 24,
+      filter: ['==', ['get', 'class'], 'city'],
       layout: {
-        'text-field': ['get', 'name'],
+        'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
         'text-font': ['Noto Sans Bold'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 8, 11, 12, 16]
+        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 11, 12, 16]
       },
-      paint: {
-        'text-color': '#222',
-        'text-halo-color': '#f5f3ee',
-        'text-halo-width': 1.5
-      }
+      paint: { 'text-color': '#222', 'text-halo-color': '#f5f3ee', 'text-halo-width': 1.5 }
     },
     {
-      id: 'place-town', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 10, maxzoom: 24,
-      filter: ['==', ['get', 'place'], 'town'],
+      id: 'place-town', type: 'symbol', source: 'basemap', 'source-layer': 'place',
+      minzoom: 9, maxzoom: 24,
+      filter: ['==', ['get', 'class'], 'town'],
       layout: {
-        'text-field': ['get', 'name'],
+        'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
         'text-font': ['Noto Sans Regular'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 10, 10, 14, 14]
+        'text-size': ['interpolate', ['linear'], ['zoom'], 9, 10, 14, 14]
       },
-      paint: {
-        'text-color': '#333',
-        'text-halo-color': '#f5f3ee',
-        'text-halo-width': 1.5
-      }
+      paint: { 'text-color': '#333', 'text-halo-color': '#f5f3ee', 'text-halo-width': 1.5 }
     },
     {
-      id: 'place-village', type: 'symbol', source: SRC, 'source-layer': 'places',
-      minzoom: 12, maxzoom: 24,
-      filter: ['==', ['get', 'place'], 'village'],
+      id: 'place-village', type: 'symbol', source: 'basemap', 'source-layer': 'place',
+      minzoom: 11, maxzoom: 24,
+      filter: ['==', ['get', 'class'], 'village'],
       layout: {
-        'text-field': ['get', 'name'],
+        'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
         'text-font': ['Noto Sans Regular'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 12, 10, 15, 13]
+        'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 15, 13]
       },
-      paint: {
-        'text-color': '#444',
-        'text-halo-color': '#f5f3ee',
-        'text-halo-width': 1.5
-      }
+      paint: { 'text-color': '#444', 'text-halo-color': '#f5f3ee', 'text-halo-width': 1.5 }
     },
 
+    // ─── Climbing layers (local PMTiles) ─────────────────────────
     {
-      id: 'boulder', type: 'fill', source: SRC, 'source-layer': 'boulders',
-      paint: {
-        'fill-color': '#4a4a4a',
-        'fill-opacity': 0.85,
-        'fill-outline-color': '#2b2b2b'
-      }
+      id: 'boulder', type: 'fill', source: 'climbing', 'source-layer': 'boulders',
+      paint: { 'fill-color': '#4a4a4a', 'fill-opacity': 0.85, 'fill-outline-color': '#2b2b2b' }
     },
-
     {
-      id: 'route', type: 'circle', source: SRC, 'source-layer': 'routes',
+      id: 'route', type: 'circle', source: 'climbing', 'source-layer': 'routes',
       minzoom: 12,
       paint: {
         'circle-color': gradeMatchExpr(),
@@ -220,9 +217,8 @@ const style = {
         'circle-stroke-opacity': 0.9
       }
     },
-
     {
-      id: 'route-hit', type: 'circle', source: SRC, 'source-layer': 'routes',
+      id: 'route-hit', type: 'circle', source: 'climbing', 'source-layer': 'routes',
       minzoom: 12,
       paint: { 'circle-color': '#000', 'circle-opacity': 0, 'circle-radius': 12 }
     }
@@ -230,4 +226,4 @@ const style = {
 }
 
 writeFileSync('themes.json', JSON.stringify(style, null, 2))
-console.log('Wrote themes.json (Default only)')
+console.log('Wrote themes.json (climbing features + OpenFreeMap basemap)')

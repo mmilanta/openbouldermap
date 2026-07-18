@@ -28,8 +28,8 @@ map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-
 ;(window as any).__map = map
 
 map.on('load', () => {
-  // Cursor: pointer over clickable route/boulder layers.
-  const interactiveLayers = ['route-hit', 'route', 'boulder']
+  // Cursor: pointer over clickable layers.
+  const interactiveLayers = ['route-hit', 'route', 'boulder', 'boulder-point', 'sector']
   for (const l of interactiveLayers) {
     map.on('mouseenter', l, () => (map.getCanvas().style.cursor = 'pointer'))
     map.on('mouseleave', l, () => (map.getCanvas().style.cursor = ''))
@@ -58,7 +58,8 @@ map.on('click', (e) => {
     showRoute(f.properties ?? {}, lon, lat)
     return
   }
-  const boulderHits = map.queryRenderedFeatures(e.point, { layers: ['boulder'] })
+  // Boulder polygons, boulder points, and sectors all show the boulder sidebar.
+  const boulderHits = map.queryRenderedFeatures(e.point, { layers: ['boulder', 'boulder-point', 'sector'] })
   if (boulderHits.length > 0) {
     const f = boulderHits[0]
     const coords = (f.geometry as any)?.coordinates

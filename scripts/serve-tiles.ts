@@ -1,8 +1,8 @@
 /**
- * Minimal XYZ tile server for a PMTiles archive.
+ * Minimal XYZ tile server for the climbing PMTiles archive.
  * Usage: npx tsx scripts/serve-tiles.ts [port]
  *
- * Reads tiles/switzerland.pmtiles and serves vector tiles at /{z}/{x}/{y}
+ * Reads tiles/climbing.pmtiles and serves vector tiles at /{z}/{x}/{y}
  * so Maputnik (or any standard MapLibre style editor) can consume them.
  */
 import { createServer, IncomingMessage, ServerResponse } from 'http'
@@ -10,7 +10,7 @@ import { PMTiles } from 'pmtiles'
 import { openSync, readSync } from 'fs'
 
 const PORT = parseInt(process.argv[2] || '8081', 10)
-const PMTILES_PATH = 'tiles/switzerland.pmtiles'
+const PMTILES_PATH = 'tiles/climbing.pmtiles'
 
 // Custom Node.js filesystem source (pmtiles expects { data: ArrayBuffer })
 const fd = openSync(PMTILES_PATH, 'r')
@@ -90,11 +90,14 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
       const header = await getHeader()
       reply(res, 200, JSON.stringify({
         tilejson: '3.0.0',
-        name: `OpenBoulderMap — ${PMTILES_PATH}`,
+        name: `OpenBoulderMap — climbing features`,
         tiles: [`http://localhost:${PORT}/{z}/{x}/{y}`],
         minzoom: header.minZoom,
         maxzoom: header.maxZoom,
-        vector_layers: []
+        vector_layers: [
+          { id: 'boulders', description: 'Boulder areas (polygons)' },
+          { id: 'routes', description: 'Boulder routes (points)' }
+        ]
       }, null, 2), 'application/json')
     } catch (err) {
       console.error('TileJSON error:', err)
@@ -107,6 +110,6 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 })
 
 server.listen(PORT, () => {
-  console.log(`\n  🗺  Tile server running at http://localhost:${PORT}\n`)
+  console.log(`\n  🗺  Climbing tile server running at http://localhost:${PORT}\n`)
   console.log(`     Source URL for Maputnik: http://localhost:${PORT}/{z}/{x}/{y}\n`)
 })

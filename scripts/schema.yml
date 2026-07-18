@@ -1,11 +1,11 @@
-schema_name: switzerland
-schema_description: 'OpenBoulderMap — hiking basemap + bouldering features for Switzerland, derived from OpenStreetMap.'
+schema_name: openbouldermap-climbing
+schema_description: 'OpenBoulderMap — climbing features (boulders + routes), derived from OpenStreetMap.'
 attribution: '&copy; OpenStreetMap contributors'
 
 sources:
   osm:
     type: osm
-    local_path: data/switzerland.osm.pbf
+    local_path: data/climbing-filtered.osm.pbf
 
 tag_mappings:
   'climbing:grade:font': string
@@ -20,173 +20,7 @@ tag_mappings:
 
 layers:
 
-  # ---- landcover (wood / grass / scrub / rock / wetland / farmland) ----
-  # We emit the raw `natural` and `landuse` tags; the MapLibre style maps them
-  # to fill colors (see src/style.ts). This keeps tile generation dumb and
-  # makes rendering easy to tweak without regenerating tiles.
-  - id: landcover
-    features:
-      - source: osm
-        geometry: polygon
-        min_zoom: 9
-        include_when:
-          __any__:
-            - natural: [wood, forest, scrub, grassland, meadow, heath, wetland, bare_rock, rock, scree, fell, shingle, sand, beach]
-            - landuse: [forest, meadow, grass, farmland, orchard, vineyard, greenhouse_horticulture, allotments, cemetery, village_green, recreation_ground]
-        attributes:
-          - { key: natural, tag_value: natural }
-          - { key: landuse, tag_value: landuse }
-        tolerance: 0.5
-        tolerance_at_max_zoom: 0.125
-        min_size: 1
-        min_size_at_max_zoom: 0.25
-    tile_post_process:
-      merge_polygons:
-        min_area: 1
-        min_area_at_max_zoom: 0.25
-        tolerance: 0.5
-        tolerance_at_max_zoom: 0.125
-
-  # ---- water (polygons) ----
-  - id: water
-    features:
-      - source: osm
-        geometry: polygon
-        min_zoom: 8
-        include_when:
-          natural: [water, reservoir, dock, riverbank, bay, strait]
-        tolerance: 0.5
-        tolerance_at_max_zoom: 0.125
-        min_size: 1
-        min_size_at_max_zoom: 0.25
-    tile_post_process:
-      merge_polygons:
-        min_area: 1
-        min_area_at_max_zoom: 0.25
-        tolerance: 0.5
-        tolerance_at_max_zoom: 0.125
-
-  # ---- waterway (lines) ----
-  - id: waterway
-    features:
-      - source: osm
-        geometry: line
-        min_zoom: 9
-        include_when:
-          waterway: [stream, river, canal, ditch, drain, tidal_channel]
-        tolerance: 1
-        tolerance_at_max_zoom: 0.0625
-        min_size: 1
-        min_size_at_max_zoom: 0.125
-    tile_post_process:
-      merge_line_strings:
-        min_length: 1
-        min_length_at_max_zoom: 0.125
-        tolerance: 1
-        tolerance_at_max_zoom: 0.0625
-        buffer: 5
-
-  # ---- boundaries (admin borders) ----
-  - id: boundaries
-    features:
-      - source: osm
-        geometry: line
-        min_zoom: 5
-        include_when:
-          boundary: administrative
-        attributes:
-          - { key: admin_level, tag_value: admin_level, type: integer }
-        tolerance: 5
-        tolerance_at_max_zoom: 0.5
-
-  # ---- transportation: roads + hiking paths/tracks ----
-  # Emit raw `highway`; style splits roads vs paths.
-  - id: transportation
-    features:
-      - source: osm
-        geometry: line
-        min_zoom: 9
-        include_when:
-          highway: [motorway, trunk, primary, secondary, tertiary, unclassified, residential, motorway_link, trunk_link, primary_link, secondary_link, tertiary_link, living_street, service, track, path, footway, cycleway, steps, pedestrian]
-        attributes:
-          - { key: highway, tag_value: highway }
-        tolerance: 1
-        tolerance_at_max_zoom: 0.0625
-        min_size: 1
-        min_size_at_max_zoom: 0.125
-    tile_post_process:
-      merge_line_strings:
-        min_length: 1
-        min_length_at_max_zoom: 0.125
-        tolerance: 1
-        tolerance_at_max_zoom: 0.0625
-        buffer: 5
-
-  # ---- places (city, canton, country labels) ----
-  # Each place type gets its own min_zoom so low-zoom tiles are not bloated.
-  - id: places
-    features:
-      - source: osm
-        geometry: point
-        min_zoom: 3
-        include_when:
-          place: [country]
-        attributes:
-          - { key: name, tag_value: name }
-          - { key: place, tag_value: place }
-      - source: osm
-        geometry: point
-        min_zoom: 5
-        include_when:
-          place: [state]
-        attributes:
-          - { key: name, tag_value: name }
-          - { key: place, tag_value: place }
-      - source: osm
-        geometry: point
-        min_zoom: 7
-        include_when:
-          place: [city]
-        attributes:
-          - { key: name, tag_value: name }
-          - { key: place, tag_value: place }
-      - source: osm
-        geometry: point
-        min_zoom: 9
-        include_when:
-          place: [town]
-        attributes:
-          - { key: name, tag_value: name }
-          - { key: place, tag_value: place }
-      - source: osm
-        geometry: point
-        min_zoom: 11
-        include_when:
-          place: [village]
-        attributes:
-          - { key: name, tag_value: name }
-          - { key: place, tag_value: place }
-
-  # ---- buildings (faint) ----
-  - id: buildings
-    features:
-      - source: osm
-        geometry: polygon
-        min_zoom: 14
-        include_when:
-          building: __any__
-        tolerance: 0.5
-        tolerance_at_max_zoom: 0.125
-        min_size: 0.5
-        min_size_at_max_zoom: 0.1
-    tile_post_process:
-      merge_polygons:
-        min_area: 0.5
-        min_area_at_max_zoom: 0.1
-        tolerance: 0.5
-        tolerance_at_max_zoom: 0.125
-
-  # ---- boulders: climbing=boulder & natural=bare_rock & sport=climbing ----
+  # ---- boulder polygons: climbing=boulder & natural=bare_rock/stone & sport=climbing ----
   - id: boulders
     features:
       - source: osm
@@ -201,6 +35,40 @@ layers:
           - { key: name, tag_value: name }
           - { key: description, tag_value: description }
           - { key: wikimedia_commons, tag_value: wikimedia_commons }
+          - { key: osm_type, value: '${ feature.osm_type }' }
+          - { key: osm_id, value: '${ feature.id }', type: long }
+
+  # ---- boulder points: climbing=boulder & natural=stone & sport=climbing ----
+  # The 227 named boulder markers in Chironico (e.g. "Sector 6 Boulder 42")
+  - id: boulder_points
+    features:
+      - source: osm
+        geometry: point
+        min_zoom: 14
+        include_when:
+          __all__:
+            - climbing: boulder
+            - natural: stone
+            - sport: climbing
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: osm_type, value: '${ feature.osm_type }' }
+          - { key: osm_id, value: '${ feature.id }', type: long }
+
+  # ---- bouldering sectors: climbing:boulder=yes (areas) ----
+  # e.g. "Magic Wood", "Paese Sector", "Minimum Boulder Flüela"
+  - id: sectors
+    features:
+      - source: osm
+        geometry: polygon
+        min_zoom: 12
+        include_when:
+          climbing:boulder: 'yes'
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: description, tag_value: description }
+          - { key: url, tag_value: url }
+          - { key: website, tag_value: website }
           - { key: osm_type, value: '${ feature.osm_type }' }
           - { key: osm_id, value: '${ feature.id }', type: long }
 

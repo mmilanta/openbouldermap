@@ -27,8 +27,11 @@ SOURCE="${1:-data/switzerland.osm.pbf}"
 FILTERED="data/climbing-filtered.osm.pbf"
 OUTPUT="tiles/climbing.pmtiles"
 
-# Tags to keep — everything climbing-related plus sport/site/type for context
-FILTER_TAGS="climbing climbing:boulder climbing:grade:font climbing:start climbing:fa climbing:length site sport natural"
+# Tags to keep — only climbing-related keys. The schema only emits features that
+# already carry a `climbing`/`climbing:boulder` tag, so keep just those keys.
+# (Adding non-climbing keys like `natural`/`sport`/`site` bloats the filtered
+# file ~1000x with objects planetiler discards anyway.)
+FILTER_TAGS="climbing climbing:boulder climbing:grade:font climbing:start climbing:fa climbing:length"
 
 # Check prerequisites
 for cmd in osmium java; do

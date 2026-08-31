@@ -78,6 +78,11 @@ at 05:17 UTC (after Geofabrik publishes the fresh Switzerland extract):
 
 Run it any time with the **Run workflow** button (Actions → Daily data update).
 
+> **Required repo setting**: to create PRs, the pipeline needs **Settings → Actions → General →
+> Workflow permissions → "Allow GitHub Actions to create and approve pull requests"** enabled
+> (GitHub leaves this off by default for personal repos). Without it, the branch is pushed but
+> the PR step fails.
+
 > Note: Geofabrik regenerates the extract daily, so the PMTiles metadata (replication
 > sequence) changes even when no new boulders were mapped — expect a small auto-merged PR
 > most days. To only get PRs when features actually change, strip the `planetiler:osm:*`

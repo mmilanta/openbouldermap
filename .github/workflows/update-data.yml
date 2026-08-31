@@ -33,6 +33,12 @@ jobs:
           fi
           osmium --version
 
+      - name: Set up Java 21 (planetiler requires >= 21)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Download planetiler
         run: curl -fLo planetiler.jar https://github.com/onthegomap/planetiler/releases/download/v0.10.2/planetiler.jar
 
@@ -90,7 +96,7 @@ jobs:
           echo "::error::PR #$PR did not merge within 10 minutes (state: $STATE)." >&2
           exit 1
 
-  # The merge is performed with GITHUB_TOKEN, so the push-to-main does NOT
+  # The merge is performed with GITHUB_TOKEN, so the push-to-master does NOT
   # trigger the normal deploy workflow (GitHub prevents GITHUB_TOKEN-triggered
   # workflows). Deploy here instead, right after the merge, so the site always
   # reflects the fresh tiles.
@@ -101,7 +107,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: master
 
       - uses: actions/setup-node@v4
         with:

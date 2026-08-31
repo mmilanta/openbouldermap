@@ -52,6 +52,9 @@ else
   echo "     Original: $ORIG_SIZE  →  Filtered: $(du -h "$FILTERED" | cut -f1)"
 fi
 
+echo "==> Extracting sector points from site relations -> data/sectors.geojson"
+osmium cat -f opl "$FILTERED" | python3 scripts/extract-sectors.py
+
 echo "==> Running planetiler (climbing-only schema) -> $OUTPUT"
 java -Xmx4g -jar planetiler.jar generate-custom \
   --schema=scripts/schema.yml \

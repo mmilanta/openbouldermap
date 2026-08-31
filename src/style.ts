@@ -34,7 +34,7 @@ export function buildStyle(): StyleSpecification {
         type: 'fill',
         source: CLIMBING,
         'source-layer': 'sectors',
-        minzoom: 12,
+        minzoom: 11,
         paint: {
           'fill-color': '#a0c8e0',
           'fill-opacity': 0.15,
@@ -46,7 +46,7 @@ export function buildStyle(): StyleSpecification {
         type: 'symbol',
         source: CLIMBING,
         'source-layer': 'sectors',
-        minzoom: 13,
+        minzoom: 11,
         layout: {
           'text-field': ['get', 'name'],
           'text-font': ['Noto Sans Bold'],

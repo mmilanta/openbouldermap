@@ -46,11 +46,12 @@ npm run dev        # http://localhost:5173
 ## How it works
 
 1. **`scripts/build-climbing-tiles.sh`** filters the OSM PBF with `osmium tags-filter … climbing`, keeping only objects with any `climbing` tag. The filtered PBF is tiny (a few MB).
-2. Planetiler processes the filtered PBF with `scripts/schema.yml` (only `boulders` and `routes` layers) and writes `tiles/climbing.pmtiles`.
-3. The frontend loads **two vector sources**:
+2. The script also runs **`scripts/extract-sectors.py`** to turn `type=site` sector relations into `data/sectors.geojson` (point per sector, centroid of its member nodes).
+3. Planetiler processes the filtered PBF + sector GeoJSON with `scripts/schema.yml` (`boulders`, `routes` and `sectors` layers) and writes `tiles/climbing.pmtiles`.
+4. The frontend loads **two vector sources**:
    - `basemap` — `https://tiles.openfreemap.org/planet/{z}/{x}/{y}.mvt` (OpenFreeMap CDN, free)
    - `climbing` — `pmtiles://…/tiles/climbing.pmtiles` (local static file)
-4. MapLibre renders basemap layers first, then boulder polygons and route dots on top.
+5. MapLibre renders basemap layers first, then sector names (z11+), then boulder polygons and route dots on top.
 
 ## Data model
 
@@ -59,6 +60,17 @@ npm run dev        # http://localhost:5173
 
 ### Routes (points)
 `climbing=route_bottom` → grade-colored dot (Font scale, green→red).
+
+### Sectors (areas + points)
+- `climbing:boulder=yes` polygon areas (e.g. "Magic Wood", "Minimum Boulder Flüela")
+  → subtle blue fill + name label.
+- `type=site` sector relations (`climbing:boulder=yes` + `site=climbing`, whose members
+  are the route/boulder nodes, e.g. "Paese Sector") → a point at the centroid of their
+  members + name label. These are extracted by `scripts/extract-sectors.py` into
+  `data/sectors.geojson` and merged into the same `sectors` tile layer.
+
+Sector names are rendered from zoom 11 out, so the area structure is visible before
+individual boulders/routes come in (z12+).
 
 ## Daily data updates
 

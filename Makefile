@@ -78,5 +78,5 @@ serve-tiles: node_modules $(CLIMBING_TILES) ## Start XYZ tile server for Maputni
 
 ## ---------------------------------------------------------------- clean
 clean: ## Remove regenerable data and tiles
-	rm -rf $(SWITZERLAND_PBF) $(PLANET_PBF) $(DEM_TIF) data/climbing-filtered.osm.pbf $(CLIMBING_TILES) $(SWISS_TILES)
+	rm -rf $(SWITZERLAND_PBF) $(PLANET_PBF) $(DEM_TIF) data/climbing-filtered.osm.pbf data/sectors.geojson $(CLIMBING_TILES) $(SWISS_TILES)
 	@echo "==> Cleaned. Rebuild with:  make download && make tiles"

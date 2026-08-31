@@ -60,6 +60,29 @@ npm run dev        # http://localhost:5173
 ### Routes (points)
 `climbing=route_bottom` → grade-colored dot (Font scale, green→red).
 
+## Daily data updates
+
+The repo ships with a fully automated data pipeline
+([`.github/workflows/update-data.yml`](.github/workflows/update-data.yml)) that runs every day
+at 05:17 UTC (after Geofabrik publishes the fresh Switzerland extract):
+
+1. **Download** — fetches `switzerland-latest.osm.pbf` from Geofabrik.
+2. **Update** — filters climbing features with `osmium` and rebuilds `tiles/climbing.pmtiles`
+   with planetiler (the same `make tiles` steps, pinned to planetiler v0.10.2).
+3. **PR** — if the tiles changed, opens `chore: update climbing tiles` from the `data-update`
+   branch. No changes → no PR.
+4. **Auto-merge** — merges the PR (squash) and cleans up the branch. If "Allow auto-merge"
+   is disabled in the repo settings it falls back to merging immediately.
+5. **Deploy** — deploys the merged result to GitHub Pages (the merge uses `GITHUB_TOKEN`, so
+   the normal push-triggered deploy does not fire for it).
+
+Run it any time with the **Run workflow** button (Actions → Daily data update).
+
+> Note: Geofabrik regenerates the extract daily, so the PMTiles metadata (replication
+> sequence) changes even when no new boulders were mapped — expect a small auto-merged PR
+> most days. To only get PRs when features actually change, strip the `planetiler:osm:*`
+> metadata keys from the built PMTiles before committing.
+
 ## OSM data coverage
 
 Climbing features depend on OSM contributors mapping them. Popular bouldering

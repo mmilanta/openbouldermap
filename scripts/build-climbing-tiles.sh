@@ -43,8 +43,20 @@ mkdir -p data tiles
 
 echo "==> Filtering climbing tags from: $SOURCE"
 if [[ "$SOURCE" == http://* || "$SOURCE" == https://* ]]; then
+  # osmium cannot follow HTTP redirects, but the planet "latest" URL is a 302
+  # chain (planet-latest -> dated file -> S3). Passing it to osmium directly
+  # makes osmium parse the redirect body as PBF and fail immediately with
+  # "PBF error: invalid BlobHeader size". Resolve the final URL with curl
+  # first so osmium reads the actual PBF bytes.
+  command -v curl >/dev/null 2>&1 || { echo "Error: curl not found in PATH"; exit 1; }
+  RESOLVED="$(curl -sIL -o /dev/null -w '%{url_effective}' "$SOURCE")"
+  if [[ "$RESOLVED" != http://* && "$RESOLVED" != https://* ]]; then
+    echo "Error: could not resolve URL for $SOURCE (got: '$RESOLVED')"
+    exit 1
+  fi
+  echo "     Resolved redirects: $RESOLVED"
   echo "     Streaming directly from URL (no full download needed) ..."
-  osmium tags-filter -o "$FILTERED" --overwrite "$SOURCE" $FILTER_TAGS
+  osmium tags-filter -o "$FILTERED" --overwrite "$RESOLVED" $FILTER_TAGS
 else
   [ -f "$SOURCE" ] || { echo "Error: PBF not found at $SOURCE"; exit 1; }
   ORIG_SIZE=$(du -h "$SOURCE" | cut -f1)

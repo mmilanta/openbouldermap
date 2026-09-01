@@ -1,10 +1,10 @@
-name: Daily data update
+name: Weekly worldwide data update
 
-# Runs every day at 05:17 UTC (after Geofabrik publishes the fresh
-# Switzerland extract) and manually via "Run workflow".
+# OSM publishes a new full-planet PBF weekly. Run on Friday, after the dump is
+# normally ready, and manually via "Run workflow".
 on:
   schedule:
-    - cron: '17 5 * * *'
+    - cron: '17 5 * * 5'
   workflow_dispatch:
 
 permissions:
@@ -14,12 +14,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: daily-data-update
+  group: weekly-worldwide-data-update
   cancel-in-progress: false
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     outputs:
       pr-number: ${{ steps.cpr.outputs.pull-request-number }}
     steps:
@@ -42,14 +43,10 @@ jobs:
       - name: Download planetiler
         run: curl -fLo planetiler.jar https://github.com/onthegomap/planetiler/releases/download/v0.10.2/planetiler.jar
 
-      - name: Download Switzerland OSM extract
-        run: |
-          mkdir -p data
-          curl -fLo data/switzerland.osm.pbf https://download.geofabrik.de/europe/switzerland-latest.osm.pbf
-          ls -lh data/switzerland.osm.pbf
-
-      - name: Build climbing tiles
-        run: bash scripts/build-climbing-tiles.sh data/switzerland.osm.pbf
+      # The planet PBF is about 95 GB. The build script streams it through
+      # osmium and writes only the small climbing-only subset to disk.
+      - name: Build worldwide climbing tiles
+        run: bash scripts/build-climbing-tiles.sh https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf
 
       - name: Create or update PR
         id: cpr
@@ -69,7 +66,7 @@ jobs:
 
           git checkout -B data-update
           git add tiles/climbing.pmtiles
-          git commit -m "chore: update climbing tiles from daily Switzerland OSM extract"
+          git commit -m "chore: update worldwide climbing tiles from OSM planet dump"
           git push --force origin data-update
 
           if gh pr view data-update --json number --jq .number >/dev/null 2>&1; then
@@ -81,7 +78,7 @@ jobs:
                 --base master \
                 --head data-update \
                 --title "chore: update climbing tiles" \
-                --body "Automated update of \`tiles/climbing.pmtiles\` from the latest Geofabrik Switzerland extract." 2>/tmp/gh-pr-create.err)"; then
+                --body "Automated worldwide update of \`tiles/climbing.pmtiles\` from the latest OpenStreetMap planet dump." 2>/tmp/gh-pr-create.err)"; then
               cat /tmp/gh-pr-create.err >&2
               echo "::error::gh pr create failed. If the error is 403 / 'Resource not accessible by integration', enable 'Allow GitHub Actions to create and approve pull requests' in repo Settings -> Actions -> General -> Workflow permissions."
               exit 1

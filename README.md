@@ -24,7 +24,7 @@ See [`requirements.md`](requirements.md) for the original spec and
 - Node ≥ 18 (Vite)
 - Inputs (not vendored):
   - `planetiler.jar` (at repo root, see [planetiler releases](https://github.com/onthegomap/planetiler/releases))
-  - An OSM PBF: the full planet (~70 GB) or a continent extract from [Geofabrik](https://download.geofabrik.de/)
+  - An OSM PBF: the full planet (~95 GB) or a continent extract from [Geofabrik](https://download.geofabrik.de/)
 
 ## Build & run
 
@@ -72,15 +72,16 @@ npm run dev        # http://localhost:5173
 Sector names are rendered from zoom 11 out, so the area structure is visible before
 individual boulders/routes come in (z12+).
 
-## Daily data updates
+## Weekly worldwide data updates
 
 The repo ships with a fully automated data pipeline
-([`.github/workflows/update-data.yml`](.github/workflows/update-data.yml)) that runs every day
-at 05:17 UTC (after Geofabrik publishes the fresh Switzerland extract):
+([`.github/workflows/update-data.yml`](.github/workflows/update-data.yml)) that runs every Friday
+at 05:17 UTC, after OpenStreetMap's weekly planet dump is normally available:
 
-1. **Download** — fetches `switzerland-latest.osm.pbf` from Geofabrik.
-2. **Update** — filters climbing features with `osmium` and rebuilds `tiles/climbing.pmtiles`
-   with planetiler (the same `make tiles` steps, pinned to planetiler v0.10.2).
+1. **Stream** — streams the ~95 GB `planet-latest.osm.pbf` through `osmium` without storing
+   the full planet on the GitHub runner.
+2. **Update** — writes only climbing-related OSM objects to a small filtered PBF, then rebuilds
+   the worldwide `tiles/climbing.pmtiles` with Planetiler v0.10.2.
 3. **PR** — if the tiles changed, opens `chore: update climbing tiles` from the `data-update`
    branch. No changes → no PR.
 4. **Auto-merge** — merges the PR (squash) and cleans up the branch. If "Allow auto-merge"
@@ -88,17 +89,15 @@ at 05:17 UTC (after Geofabrik publishes the fresh Switzerland extract):
 5. **Deploy** — deploys the merged result to GitHub Pages (the merge uses `GITHUB_TOKEN`, so
    the normal push-triggered deploy does not fire for it).
 
-Run it any time with the **Run workflow** button (Actions → Daily data update).
+Run it any time with the **Run workflow** button (Actions → Weekly worldwide data update).
 
 > **Required repo setting**: to create PRs, the pipeline needs **Settings → Actions → General →
 > Workflow permissions → "Allow GitHub Actions to create and approve pull requests"** enabled
 > (GitHub leaves this off by default for personal repos). Without it, the branch is pushed but
 > the PR step fails.
 
-> Note: Geofabrik regenerates the extract daily, so the PMTiles metadata (replication
-> sequence) changes even when no new boulders were mapped — expect a small auto-merged PR
-> most days. To only get PRs when features actually change, strip the `planetiler:osm:*`
-> metadata keys from the built PMTiles before committing.
+> Note: The planet dump metadata changes with each weekly release even when no new boulders
+> were mapped, so the workflow may create an update PR every week.
 
 ## OSM data coverage
 

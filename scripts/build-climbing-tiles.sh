@@ -10,7 +10,7 @@
 #     - A URL (https://...) — osmium will stream-filter directly, no disk temp file
 #     - Omitted — uses data/switzerland.osm.pbf
 #
-# Planet URL (streams ~87 GB, writes only a few MB):
+# Planet URL (streams ~95 GB, writes only the climbing subset):
 #   bash scripts/build-climbing-tiles.sh https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf
 #
 # Continent extract (download first):

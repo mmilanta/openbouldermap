@@ -76,12 +76,13 @@ individual boulders/routes come in (z12+).
 
 The repo ships with a fully automated data pipeline
 ([`.github/workflows/update-data.yml`](.github/workflows/update-data.yml)) that runs every Friday
-at 05:17 UTC, after OpenStreetMap's weekly planet dump is normally available:
+at 05:17 UTC:
 
-1. **Stream** — streams the ~95 GB `planet-latest.osm.pbf` through `osmium` without storing
-   the full planet on the GitHub runner.
-2. **Update** — writes only climbing-related OSM objects to a small filtered PBF, then rebuilds
-   the worldwide `tiles/climbing.pmtiles` with Planetiler v0.10.2.
+1. **Filter in parallel** — eight independent runners download and filter the latest Geofabrik
+   continent extracts. Each runner stores only one continent and deletes it immediately after
+   producing a tiny climbing-only PBF.
+2. **Update** — merges the eight filtered extracts, then rebuilds the worldwide
+   `tiles/climbing.pmtiles` with Planetiler v0.10.2.
 3. **PR** — if the tiles changed, opens `chore: update climbing tiles` from the `data-update`
    branch. No changes → no PR.
 4. **Auto-merge** — merges the PR (squash) and cleans up the branch. If "Allow auto-merge"
@@ -96,8 +97,8 @@ Run it any time with the **Run workflow** button (Actions → Weekly worldwide d
 > (GitHub leaves this off by default for personal repos). Without it, the branch is pushed but
 > the PR step fails.
 
-> Note: The planet dump metadata changes with each weekly release even when no new boulders
-> were mapped, so the workflow may create an update PR every week.
+> Note: Extract metadata can change even when no new boulders were mapped, so the workflow
+> may create an update PR every week.
 
 ## OSM data coverage
 
@@ -105,9 +106,9 @@ Climbing features depend on OSM contributors mapping them. Popular bouldering
 destinations in Europe (Fontainebleau, Chironico, Magic Wood, Albarracín, etc.)
 are well-mapped. Coverage elsewhere varies.
 
-The planet PBF filtering step is fast — `osmium tags-filter` streams through
-the file and outputs only climbing-tagged features. The resulting filtered PBF
-is tiny enough that planetiler processes it in seconds.
+The continent filtering jobs run in parallel and output only climbing-tagged
+features plus their referenced geometry. The resulting filtered PBFs are tiny
+enough that merging them and running Planetiler takes little time.
 
 ## License
 

@@ -3,19 +3,16 @@
 # bouldering features (boulders + routes + sectors), extracted from an OSM PBF.
 #
 # Usage:
-#   bash scripts/build-climbing-tiles.sh [source]
+#   bash scripts/build-climbing-tiles.sh [source ...]
 #
-#   source can be:
+#   Each source can be:
 #     - A local .osm.pbf file (e.g. data/switzerland.osm.pbf)
-#     - A URL (https://...) — osmium will stream-filter directly, no disk temp file
+#     - A URL (https://...) — downloaded temporarily, filtered, then deleted
 #     - Omitted — uses data/switzerland.osm.pbf
 #
-# Planet URL (streams ~95 GB, writes only the climbing subset):
-#   bash scripts/build-climbing-tiles.sh https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf
-#
-# Continent extract (download first):
-#   curl -Lo data/europe.osm.pbf https://download.geofabrik.de/europe-latest.osm.pbf
-#   bash scripts/build-climbing-tiles.sh data/europe.osm.pbf
+# Multiple filtered extracts are merged before tile generation. This lets CI
+# process Geofabrik's continent extracts one at a time without needing enough
+# disk space for the ~95 GB planet file.
 #
 # Requires: osmium, java >= 17, planetiler.jar (at repo root)
 set -euo pipefail
@@ -23,7 +20,11 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
-SOURCE="${1:-data/switzerland.osm.pbf}"
+if (( $# )); then
+  SOURCES=("$@")
+else
+  SOURCES=(data/switzerland.osm.pbf)
+fi
 FILTERED="data/climbing-filtered.osm.pbf"
 OUTPUT="tiles/climbing.pmtiles"
 
@@ -41,21 +42,47 @@ done
 
 mkdir -p data tiles
 
-echo "==> Filtering climbing tags from: $SOURCE"
-if [[ "$SOURCE" == http://* || "$SOURCE" == https://* ]]; then
-  # libosmium's built-in URL reader starts curl without following redirects and
-  # hides its stderr when curl fails. Stream with curl explicitly so redirects,
-  # retries, and useful errors are handled while avoiding a full planet download.
-  command -v curl >/dev/null 2>&1 || { echo "Error: curl not found in PATH"; exit 1; }
-  echo "     Streaming directly from URL (no full download needed) ..."
-  curl -fL --retry 5 --retry-all-errors "$SOURCE" |
-    osmium tags-filter --input-format pbf -o "$FILTERED" --overwrite - $FILTER_TAGS
+PARTS=()
+TEMP_INPUTS=()
+cleanup() {
+  rm -f "${PARTS[@]}" "${TEMP_INPUTS[@]}"
+}
+trap cleanup EXIT
+
+for INDEX in "${!SOURCES[@]}"; do
+  SOURCE="${SOURCES[$INDEX]}"
+  INPUT="$SOURCE"
+  PART="data/climbing-filtered-$INDEX.osm.pbf"
+  PARTS+=("$PART")
+
+  echo "==> Filtering climbing tags from: $SOURCE"
+  if [[ "$SOURCE" == http://* || "$SOURCE" == https://* ]]; then
+    command -v curl >/dev/null 2>&1 || { echo "Error: curl not found in PATH"; exit 1; }
+    INPUT="data/osm-source-$INDEX.osm.pbf"
+    TEMP_INPUTS+=("$INPUT")
+    echo "     Downloading extract temporarily so osmium can make the passes needed to preserve referenced geometry ..."
+    curl -fL --retry 5 --retry-all-errors -o "$INPUT" "$SOURCE"
+  else
+    [ -f "$INPUT" ] || { echo "Error: PBF not found at $INPUT"; exit 1; }
+  fi
+
+  ORIG_SIZE=$(du -h "$INPUT" | cut -f1)
+  osmium tags-filter -o "$PART" --overwrite "$INPUT" $FILTER_TAGS
+  echo "     Original: $ORIG_SIZE  →  Filtered: $(du -h "$PART" | cut -f1)"
+
+  if [[ "$INPUT" != "$SOURCE" ]]; then
+    rm -f "$INPUT"
+  fi
+done
+
+if (( ${#PARTS[@]} == 1 )); then
+  mv "${PARTS[0]}" "$FILTERED"
 else
-  [ -f "$SOURCE" ] || { echo "Error: PBF not found at $SOURCE"; exit 1; }
-  ORIG_SIZE=$(du -h "$SOURCE" | cut -f1)
-  osmium tags-filter -o "$FILTERED" --overwrite "$SOURCE" $FILTER_TAGS
-  echo "     Original: $ORIG_SIZE  →  Filtered: $(du -h "$FILTERED" | cut -f1)"
+  echo "==> Merging ${#PARTS[@]} filtered extracts -> $FILTERED"
+  osmium merge -o "$FILTERED" --overwrite "${PARTS[@]}"
+  rm -f "${PARTS[@]}"
 fi
+trap - EXIT
 
 echo "==> Extracting sector points from site relations -> data/sectors.geojson"
 osmium cat -f opl "$FILTERED" | python3 scripts/extract-sectors.py

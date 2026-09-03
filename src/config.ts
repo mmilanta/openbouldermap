@@ -1,7 +1,7 @@
 // Central config: tile source URLs, initial view, zoom range.
 
-// Initial map view — world overview.
-// The user zooms into an area to see boulders/routes appear (z12+).
+// Initial map view — world overview. Areas appear first, followed by sectors,
+// then physical boulders and problems as the user zooms in.
 export const INITIAL_VIEW = {
   center: [8.22, 46.82] as [number, number],
   zoom: 3,

@@ -77,11 +77,16 @@ export function renderPhotoBlock(
   paths: Array<{ points: PathPoint[]; color: string; label?: string }>,
 ): HTMLElement {
   const container = document.createElement('div')
-  container.className = 'photo-block'
+  container.className = 'photo-block loading'
+
+  const loader = document.createElement('div')
+  loader.className = 'photo-loader'
+  loader.setAttribute('role', 'status')
+  loader.setAttribute('aria-label', 'Loading image')
+  container.appendChild(loader)
 
   const img = document.createElement('img')
   img.className = 'photo-img'
-  img.src = wikimediaUrl(imageFilename)
   img.alt = 'Boulder photo'
   container.appendChild(img)
 
@@ -91,6 +96,9 @@ export function renderPhotoBlock(
   container.appendChild(svg)
 
   img.addEventListener('load', () => {
+    container.classList.remove('loading')
+    loader.remove()
+
     const w = img.naturalWidth
     const h = img.naturalHeight
     if (w === 0 || h === 0) return
@@ -155,6 +163,13 @@ export function renderPhotoBlock(
       svg.appendChild(g)
     }
   })
+  img.addEventListener('error', () => {
+    container.classList.remove('loading')
+    loader.remove()
+  })
+  // Set src after listeners so cached images cannot finish before the loader
+  // and route overlay handlers are ready.
+  img.src = wikimediaUrl(imageFilename)
 
   return container
 }

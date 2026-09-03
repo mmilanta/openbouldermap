@@ -46,12 +46,13 @@ npm run dev        # http://localhost:5173
 ## How it works
 
 1. **`scripts/build-climbing-tiles.sh`** filters the OSM PBF with `osmium tags-filter … climbing`, keeping only objects with any `climbing` tag. The filtered PBF is tiny (a few MB).
-2. The script also runs **`scripts/extract-sectors.py`** to turn `type=site` sector relations into `data/sectors.geojson` (point per sector, centroid of its member nodes).
-3. Planetiler processes the filtered PBF + sector GeoJSON with `scripts/schema.yml` (`boulders`, `routes` and `sectors` layers) and writes `tiles/climbing.pmtiles`.
+2. The script also runs **`scripts/extract-sectors.py`** to turn nested `type=site` area/sector relations into `data/sectors.geojson` centroid points.
+3. Planetiler processes the filtered PBF + site GeoJSON with `scripts/schema.yml` (`areas`, `sectors`, `boulders`, `boulder_points`, and `routes` layers) and writes `tiles/climbing.pmtiles`.
 4. The frontend loads **two vector sources**:
    - `basemap` — `https://tiles.openfreemap.org/planet/{z}/{x}/{y}.mvt` (OpenFreeMap CDN, free)
    - `climbing` — `pmtiles://…/tiles/climbing.pmtiles` (local static file)
-5. MapLibre renders basemap layers first, then sector names (z11+), then boulder polygons and route dots on top.
+5. MapLibre progressively reveals the hierarchy: area names below z13, sector names from z13 to z16, boulder names from z16 to z19, and problem names from z19. Physical boulders and grade-colored problem dots also appear at z13.
+6. Selecting a sector fetches its direct relation members from the live OSM API and shows its problems with grades. Selecting a problem flies the map to it at z19.
 
 ## Data model
 
@@ -61,16 +62,17 @@ npm run dev        # http://localhost:5173
 ### Routes (points)
 `climbing=route_bottom` → grade-colored dot (Font scale, green→red).
 
-### Sectors (areas + points)
-- `climbing:boulder=yes` polygon areas (e.g. "Magic Wood", "Minimum Boulder Flüela")
-  → subtle blue fill + name label.
-- `type=site` sector relations (`climbing:boulder=yes` + `site=climbing`, whose members
-  are the route/boulder nodes, e.g. "Paese Sector") → a point at the centroid of their
-  members + name label. These are extracted by `scripts/extract-sectors.py` into
-  `data/sectors.geojson` and merged into the same `sectors` tile layer.
+### Areas and sectors
+- **Areas** are `type=site` relations tagged `climbing=area` +
+  `climbing:boulder=yes`. They contain sector relations; their names render below z13.
+- **Sectors** are `type=site` relations tagged `climbing=crag` +
+  `climbing:boulder=yes`. They directly contain problem nodes; their names render from z13 to z16.
+- Polygon objects with the same classification render as subtle fills. Site relations
+  render as centroid points generated recursively by `scripts/extract-sectors.py`.
 
-Sector names are rendered from zoom 11 out, so the area structure is visible before
-individual boulders/routes come in (z12+).
+Areas and sectors are represented by clickable names without dot markers. At z13,
+physical boulders and problem dots appear. Boulder names replace sector names at z16
+and stay above the problem dots until problem names replace them at z19.
 
 ## Weekly worldwide data updates
 

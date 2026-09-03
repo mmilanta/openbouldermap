@@ -10,8 +10,7 @@
     "build": "vite build && mkdir -p dist/tiles && cp tiles/climbing.pmtiles dist/tiles/",
     "preview": "vite preview --port 4173",
     "build-tiles": "bash scripts/build-climbing-tiles.sh",
-    "serve-tiles": "npx tsx scripts/serve-tiles.ts 8081",
-    "themes-json": "npx tsx scripts/generate-themes-json.ts"
+    "serve-tiles": "npx tsx scripts/serve-tiles.ts 8081"
   },
   "devDependencies": {
     "playwright": "^1.61.1",

@@ -88,6 +88,55 @@ html, body, #app { height: 100%; margin: 0; }
 
 .muted { color: #8a8a8a; font-size: 12px; margin-top: 8px; }
 
+/* ---- sector problem list ---- */
+.sector-routes { margin-top: 20px; }
+.sector-routes-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #686868;
+}
+.sector-route-list { display: flex; flex-direction: column; gap: 5px; }
+.sector-route {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 1px solid #ded9ce;
+  border-radius: 6px;
+  background: #fff;
+  color: #242424;
+  text-align: left;
+  cursor: pointer;
+}
+.sector-route:hover { background: #f4f1e9; border-color: #c4bdae; }
+.sector-route-name { min-width: 0; font-size: 13px; line-height: 1.25; }
+.sector-route-grade {
+  flex: none;
+  min-width: 34px;
+  padding: 2px 6px;
+  border-radius: 9px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+.problem-sector-link { margin-top: 16px; }
+.problem-sector-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2f6b8f;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 /* ---- attribution ---- */
 #attribution {
   position: absolute;
@@ -101,32 +150,6 @@ html, body, #app { height: 100%; margin: 0; }
 }
 #attribution a { color: #444; }
 #sidebar.hidden ~ #attribution { right: 0; }
-#sidebar.hidden ~ #theme-switcher { right: 10px; }
-#sidebar:not(.hidden) ~ #theme-switcher { right: 350px; }
-
-/* ---- theme switcher ---- */
-#theme-switcher {
-  position: absolute;
-  right: 10px;
-  bottom: 24px;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 6px;
-  padding: 6px 8px 5px;
-  font-size: 11px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.theme-label { white-space: nowrap; color: #555; }
-#theme-select {
-  font-size: 11px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 2px 4px;
-  background: #fff;
-  cursor: pointer;
-}
 
 /* ---- photo block ---- */
 .photo-block {
@@ -134,6 +157,24 @@ html, body, #app { height: 100%; margin: 0; }
   margin: 0 -18px 14px;
   line-height: 0;
 }
+.photo-block.loading {
+  min-height: 180px;
+  background: #f0ede5;
+}
+.photo-loader {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border: 3px solid rgba(47, 107, 143, 0.2);
+  border-top-color: #2f6b8f;
+  border-radius: 50%;
+  animation: photo-loader-spin 0.8s linear infinite;
+}
+@keyframes photo-loader-spin { to { transform: rotate(360deg); } }
 .photo-block .photo-img {
   display: block;
   width: 100%;

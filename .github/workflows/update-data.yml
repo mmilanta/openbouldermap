@@ -23,7 +23,9 @@ jobs:
   # separate runners so no runner stores more than one extract.
   filter:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    # Standard GitHub-hosted jobs are capped at six hours. Reserve one hour for
+    # filtering and artifact upload, leaving most of the job for the download.
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -45,16 +47,26 @@ jobs:
           fi
           osmium --version
 
-      - name: Download and filter ${{ matrix.region }}
+      - name: Download ${{ matrix.region }}
+        timeout-minutes: 285
         run: |
           set -euo pipefail
           mkdir -p data
           SOURCE="data/${{ matrix.region }}.osm.pbf"
-          OUTPUT="data/climbing-${{ matrix.region }}.osm.pbf"
-          trap 'rm -f "$SOURCE"' EXIT
-          curl -fL --retry 5 --retry-all-errors \
+          # Resume partial transfers instead of restarting a multi-GB extract
+          # when Geofabrik closes a connection (curl error 18).
+          curl -fL --continue-at - \
+            --retry 1000 --retry-all-errors --retry-delay 5 --retry-max-time 17100 \
             -o "$SOURCE" \
             "https://download.geofabrik.de/${{ matrix.region }}-latest.osm.pbf"
+
+      - name: Filter ${{ matrix.region }}
+        timeout-minutes: 60
+        run: |
+          set -euo pipefail
+          SOURCE="data/${{ matrix.region }}.osm.pbf"
+          OUTPUT="data/climbing-${{ matrix.region }}.osm.pbf"
+          trap 'rm -f "$SOURCE"' EXIT
           osmium tags-filter -o "$OUTPUT" --overwrite "$SOURCE" \
             climbing climbing:boulder climbing:grade:font climbing:start climbing:fa climbing:length
           ls -lh "$OUTPUT"

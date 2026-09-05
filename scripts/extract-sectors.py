@@ -137,9 +137,20 @@ def main() -> None:
             ):
                 sites[oid] = (tags["name"], climbing, parse_members(member_str))
 
+    # Some datasets tag both the destination and its immediate child sectors as
+    # climbing=area (for example Chironico). Infer those children as sectors
+    # from the site-relation hierarchy, while preserving explicit crag tags.
+    child_site_ids = {
+        member_id
+        for _parent_id, (_name, _climbing, members) in sites.items()
+        for member_type, member_id in members
+        if member_type == "r" and member_id in sites
+    }
+
     # Resolve each site's members (nodes, ways, nested relations) to coordinates.
     features = []
     for rel_id, (name, climbing, members) in sorted(sites.items()):
+        effective_climbing = "crag" if climbing == "crag" or rel_id in child_site_ids else "area"
         coords: list[tuple[float, float]] = []
 
         def collect(refs: list[tuple[str, int]], depth: int = 0) -> None:
@@ -168,8 +179,8 @@ def main() -> None:
                 "geometry": {"type": "Point", "coordinates": [round(lon, 7), round(lat, 7)]},
                 "properties": {
                     "name": name,
-                    "climbing": climbing,
-                    "kind": "area" if climbing == "area" else "sector",
+                    "climbing": effective_climbing,
+                    "kind": "area" if effective_climbing == "area" else "sector",
                     "osm_id": rel_id,
                     "osm_type": "relation",
                 },

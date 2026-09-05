@@ -80,11 +80,9 @@ The repo ships with a fully automated data pipeline
 ([`.github/workflows/update-data.yml`](.github/workflows/update-data.yml)) that runs every Friday
 at 05:17 UTC:
 
-1. **Filter in parallel** — eight independent runners download and filter the latest Geofabrik
-   continent extracts. Each runner stores only one continent and deletes it immediately after
-   producing a tiny climbing-only PBF.
-2. **Update** — merges the eight filtered extracts, then rebuilds the worldwide
-   `tiles/climbing.pmtiles` with Planetiler v0.10.2.
+1. **Download** — runs one global climbing-key query against the Overpass API. The tag-indexed
+   query downloads only climbing objects and their referenced geometry as a small PBF.
+2. **Update** — rebuilds the worldwide `tiles/climbing.pmtiles` with Planetiler v0.10.2.
 3. **PR** — if the tiles changed, opens `chore: update climbing tiles` from the `data-update`
    branch. No changes → no PR.
 4. **Auto-merge** — merges the PR (squash) and cleans up the branch. If "Allow auto-merge"
@@ -99,8 +97,8 @@ Run it any time with the **Run workflow** button (Actions → Weekly worldwide d
 > (GitHub leaves this off by default for personal repos). Without it, the branch is pushed but
 > the PR step fails.
 
-> Note: Extract metadata can change even when no new boulders were mapped, so the workflow
-> may create an update PR every week.
+> Note: OSM metadata can change even when no new boulders were mapped, so the workflow may
+> create an update PR every week.
 
 ## OSM data coverage
 
@@ -108,9 +106,8 @@ Climbing features depend on OSM contributors mapping them. Popular bouldering
 destinations in Europe (Fontainebleau, Chironico, Magic Wood, Albarracín, etc.)
 are well-mapped. Coverage elsewhere varies.
 
-The continent filtering jobs run in parallel and output only climbing-tagged
-features plus their referenced geometry. The resulting filtered PBFs are tiny
-enough that merging them and running Planetiler takes little time.
+The global Overpass query uses the `climbing` tag index and includes referenced
+geometry. The resulting PBF is tiny enough that Planetiler processes it quickly.
 
 ## License
 

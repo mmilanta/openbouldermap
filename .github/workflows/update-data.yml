@@ -1,7 +1,7 @@
 name: Weekly worldwide data update
 
-# Geofabrik refreshes its OSM extracts daily. Run every Friday and manually via
-# "Run workflow".
+# Refresh worldwide climbing data from OpenStreetMap Overpass every Friday and
+# manually via "Run workflow".
 on:
   schedule:
     - cron: '17 5 * * 5'
@@ -18,68 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Filtering needs a seekable PBF because osmium makes multiple passes to keep
-  # nodes referenced by matching ways and relations. Process continents on
-  # separate runners so no runner stores more than one extract.
-  filter:
-    runs-on: ubuntu-latest
-    # Standard GitHub-hosted jobs are capped at six hours. Reserve one hour for
-    # filtering and artifact upload, leaving most of the job for the download.
-    timeout-minutes: 360
-    strategy:
-      fail-fast: false
-      matrix:
-        region:
-          - africa
-          - antarctica
-          - asia
-          - australia-oceania
-          - central-america
-          - europe
-          - north-america
-          - south-america
-    steps:
-      - name: Install osmium
-        run: |
-          if ! command -v osmium >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y osmium-tool
-          fi
-          osmium --version
-
-      - name: Download ${{ matrix.region }}
-        timeout-minutes: 285
-        run: |
-          set -euo pipefail
-          mkdir -p data
-          SOURCE="data/${{ matrix.region }}.osm.pbf"
-          # Resume partial transfers instead of restarting a multi-GB extract
-          # when Geofabrik closes a connection (curl error 18).
-          curl -fL --continue-at - \
-            --retry 1000 --retry-all-errors --retry-delay 5 --retry-max-time 17100 \
-            -o "$SOURCE" \
-            "https://download.geofabrik.de/${{ matrix.region }}-latest.osm.pbf"
-
-      - name: Filter ${{ matrix.region }}
-        timeout-minutes: 60
-        run: |
-          set -euo pipefail
-          SOURCE="data/${{ matrix.region }}.osm.pbf"
-          OUTPUT="data/climbing-${{ matrix.region }}.osm.pbf"
-          trap 'rm -f "$SOURCE"' EXIT
-          osmium tags-filter -o "$OUTPUT" --overwrite "$SOURCE" \
-            climbing climbing:boulder climbing:grade:font climbing:start climbing:fa climbing:length
-          ls -lh "$OUTPUT"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: climbing-${{ matrix.region }}
-          path: data/climbing-${{ matrix.region }}.osm.pbf
-          retention-days: 1
-          if-no-files-found: error
-
   update:
-    needs: filter
     runs-on: ubuntu-latest
     timeout-minutes: 120
     outputs:
@@ -95,11 +34,11 @@ jobs:
           fi
           osmium --version
 
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: climbing-*
-          path: data/extracts
-          merge-multiple: true
+      # A global climbing-key lookup uses Overpass's tag index. This transfers
+      # only a few MB instead of downloading hundreds of GB of continent PBFs.
+      - name: Download worldwide climbing data from Overpass
+        timeout-minutes: 40
+        run: scripts/download-overpass-climbing.sh --output data/overpass-climbing.osm.pbf
 
       - name: Set up Java 21 (planetiler requires >= 21)
         uses: actions/setup-java@v4
@@ -111,13 +50,7 @@ jobs:
         run: curl -fLo planetiler.jar https://github.com/onthegomap/planetiler/releases/download/v0.10.2/planetiler.jar
 
       - name: Build worldwide climbing tiles
-        run: |
-          mapfile -t EXTRACTS < <(find data/extracts -type f -name '*.osm.pbf' -print | sort)
-          if (( ${#EXTRACTS[@]} != 8 )); then
-            echo "Expected 8 filtered continent extracts, found ${#EXTRACTS[@]}" >&2
-            exit 1
-          fi
-          bash scripts/build-climbing-tiles.sh "${EXTRACTS[@]}"
+        run: bash scripts/build-climbing-tiles.sh data/overpass-climbing.osm.pbf
 
       - name: Create or update PR
         id: cpr
@@ -137,7 +70,7 @@ jobs:
 
           git checkout -B data-update
           git add tiles/climbing.pmtiles
-          git commit -m "chore: update worldwide climbing tiles from OSM extracts"
+          git commit -m "chore: update worldwide climbing tiles from Overpass"
           git push --force origin data-update
 
           if gh pr view data-update --json number --jq .number >/dev/null 2>&1; then
@@ -149,7 +82,7 @@ jobs:
                 --base master \
                 --head data-update \
                 --title "chore: update climbing tiles" \
-                --body "Automated worldwide update of \`tiles/climbing.pmtiles\` from the latest Geofabrik OpenStreetMap extracts." 2>/tmp/gh-pr-create.err)"; then
+                --body "Automated worldwide update of \`tiles/climbing.pmtiles\` from the OpenStreetMap Overpass API." 2>/tmp/gh-pr-create.err)"; then
               cat /tmp/gh-pr-create.err >&2
               echo "::error::gh pr create failed. If the error is 403 / 'Resource not accessible by integration', enable 'Allow GitHub Actions to create and approve pull requests' in repo Settings -> Actions -> General -> Workflow permissions."
               exit 1

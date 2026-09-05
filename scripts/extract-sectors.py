@@ -147,45 +147,80 @@ def main() -> None:
         if member_type == "r" and member_id in sites
     }
 
-    # Resolve each site's members (nodes, ways, nested relations) to coordinates.
-    features = []
-    for rel_id, (name, climbing, members) in sorted(sites.items()):
-        effective_climbing = "crag" if climbing == "crag" or rel_id in child_site_ids else "area"
+    # Resolve site centroids first so links can carry the destination location
+    # without making additional OSM API requests in the browser.
+    centroids: dict[int, tuple[float, float]] = {}
+    for rel_id, (name, _climbing, members) in sorted(sites.items()):
         coords: list[tuple[float, float]] = []
 
         def collect(refs: list[tuple[str, int]], depth: int = 0) -> None:
             if depth > 4:
                 return
             for mtype, mid in refs:
-                if mtype == "n":
-                    if mid in node_coords:
-                        coords.append(node_coords[mid])
-                elif mtype == "w":
-                    if mid in way_nodes:
-                        collect([("n", n) for n in way_nodes[mid]], depth + 1)
-                elif mtype == "r":
-                    if mid in sites:
-                        collect(sites[mid][2], depth + 1)
+                if mtype == "n" and mid in node_coords:
+                    coords.append(node_coords[mid])
+                elif mtype == "w" and mid in way_nodes:
+                    collect([("n", n) for n in way_nodes[mid]], depth + 1)
+                elif mtype == "r" and mid in sites:
+                    collect(sites[mid][2], depth + 1)
 
         collect(members)
-        if not coords:
+        if coords:
+            centroids[rel_id] = (
+                round(sum(c[0] for c in coords) / len(coords), 7),
+                round(sum(c[1] for c in coords) / len(coords), 7),
+            )
+        else:
             print(f"warning: no coordinates for climbing site {rel_id} ({name})", file=sys.stderr)
+
+    parent_by_child: dict[int, int] = {}
+    for parent_id, (_name, _climbing, members) in sites.items():
+        if parent_id in child_site_ids:  # only top-level areas are parents
             continue
-        lon = sum(c[0] for c in coords) / len(coords)
-        lat = sum(c[1] for c in coords) / len(coords)
-        features.append(
-            {
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [round(lon, 7), round(lat, 7)]},
-                "properties": {
-                    "name": name,
-                    "climbing": effective_climbing,
-                    "kind": "area" if effective_climbing == "area" else "sector",
-                    "osm_id": rel_id,
-                    "osm_type": "relation",
-                },
-            }
-        )
+        for member_type, member_id in members:
+            if member_type == "r" and member_id in sites:
+                parent_by_child[member_id] = parent_id
+
+    def child_summaries(parent_id: int) -> list[dict[str, object]]:
+        return [
+            {"id": member_id, "name": sites[member_id][0], "lon": centroids[member_id][0], "lat": centroids[member_id][1]}
+            for member_type, member_id in sites[parent_id][2]
+            if member_type == "r" and member_id in sites and member_id in centroids
+        ]
+
+    features = []
+    for rel_id, (name, climbing, members) in sorted(sites.items()):
+        if rel_id not in centroids:
+            continue
+        effective_climbing = "crag" if climbing == "crag" or rel_id in child_site_ids else "area"
+        lon, lat = centroids[rel_id]
+        properties: dict[str, object] = {
+            "name": name,
+            "climbing": effective_climbing,
+            "kind": "area" if effective_climbing == "area" else "sector",
+            "osm_id": rel_id,
+            "osm_type": "relation",
+        }
+
+        parent_id = parent_by_child.get(rel_id)
+        if parent_id is not None and parent_id in centroids:
+            parent_lon, parent_lat = centroids[parent_id]
+            properties.update({
+                "parent_area_id": parent_id,
+                "parent_area_name": sites[parent_id][0],
+                "parent_area_lon": parent_lon,
+                "parent_area_lat": parent_lat,
+                "parent_area_sectors": json.dumps(child_summaries(parent_id), separators=(",", ":")),
+            })
+
+        if effective_climbing == "area":
+            properties["sectors"] = json.dumps(child_summaries(rel_id), separators=(",", ":"))
+
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            "properties": properties,
+        })
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("w") as f:

@@ -41,6 +41,13 @@ document.getElementById('sidebar-close')!.addEventListener('click', hideSidebar)
 let routeNavigator: ((route: SectorRoute) => void) | undefined
 let sectorNavigator: ((lon: number, lat: number) => void) | undefined
 
+interface HierarchyLocation {
+  id: number
+  name: string
+  lon: number
+  lat: number
+}
+
 export function setRouteNavigator(navigate: (route: SectorRoute) => void): void {
   routeNavigator = navigate
 }
@@ -110,6 +117,7 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
 }
 
 export function showBoulder(props: Record<string, any>, lon: number, lat: number): void {
+  props = { ...props, __lon: lon, __lat: lat }
   const kind = pick(props, 'kind')
   const fallbackName = kind === 'area' ? 'Unnamed bouldering area' : kind === 'sector' ? 'Unnamed sector' : 'Unnamed boulder'
   const name = pick(props, 'name') ?? fallbackName
@@ -131,6 +139,13 @@ export function showBoulder(props: Record<string, any>, lon: number, lat: number
       : 'Physical boulder (climbing=boulder).'
   html.push(el('div', 'muted', typeDescription))
 
+  const hierarchyLinks = kind === 'area'
+    ? buildAreaSectorLinks(props)
+    : kind === 'sector'
+      ? buildSectorAreaLink(props)
+      : undefined
+  if (hierarchyLinks) html.push(hierarchyLinks)
+
   const routeList = kind === 'sector' ? buildSectorRouteList(props) : undefined
   if (routeList) html.push(routeList)
 
@@ -143,6 +158,71 @@ export function showBoulder(props: Record<string, any>, lon: number, lat: number
     lon,
     lat
   })
+}
+
+function hierarchyButton(label: string, location: HierarchyLocation, kind: 'area' | 'sector'): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = 'problem-sector-button hierarchy-button'
+  button.textContent = label
+  button.addEventListener('click', () => {
+    sectorNavigator?.(location.lon, location.lat)
+    const linkedProperties = kind === 'area'
+      ? { sectors: (location as any).sectors }
+      : {
+          parent_area_id: (location as any).parent_area_id,
+          parent_area_name: (location as any).parent_area_name,
+          parent_area_lon: (location as any).parent_area_lon,
+          parent_area_lat: (location as any).parent_area_lat,
+          parent_area_sectors: (location as any).parent_area_sectors
+        }
+    showBoulder({ name: location.name, kind, osm_id: location.id, osm_type: 'relation', ...linkedProperties }, location.lon, location.lat)
+  })
+  return button
+}
+
+function buildAreaSectorLinks(props: Record<string, any>): HTMLElement | undefined {
+  const raw = pick(props, 'sectors')
+  if (!raw) return undefined
+  let sectors: HierarchyLocation[]
+  try {
+    sectors = JSON.parse(raw)
+  } catch {
+    return undefined
+  }
+  if (!Array.isArray(sectors) || !sectors.length) return undefined
+
+  const section = el('section', 'sector-routes hierarchy-links', '')
+  section.appendChild(el('h2', 'sector-routes-title', 'Sectors'))
+  for (const sector of sectors) {
+    if (Number.isFinite(sector.id) && Number.isFinite(sector.lon) && Number.isFinite(sector.lat)) {
+      section.appendChild(hierarchyButton(sector.name || 'Unnamed sector', {
+        ...sector,
+        parent_area_id: Number(props.osm_id),
+        parent_area_name: pick(props, 'name') ?? 'Unnamed bouldering area',
+        parent_area_lon: Number((props as any).__lon),
+        parent_area_lat: Number((props as any).__lat),
+        parent_area_sectors: raw
+      } as any, 'sector'))
+    }
+  }
+  return section.children.length > 1 ? section : undefined
+}
+
+function buildSectorAreaLink(props: Record<string, any>): HTMLElement | undefined {
+  const area: HierarchyLocation = {
+    id: Number(props.parent_area_id),
+    name: pick(props, 'parent_area_name') ?? 'Unnamed bouldering area',
+    lon: Number(props.parent_area_lon),
+    lat: Number(props.parent_area_lat),
+    sectors: pick(props, 'parent_area_sectors')
+  } as HierarchyLocation
+  if (![area.id, area.lon, area.lat].every(Number.isFinite)) return undefined
+
+  const section = el('section', 'sector-routes hierarchy-links', '')
+  section.appendChild(el('h2', 'sector-routes-title', 'Area'))
+  section.appendChild(hierarchyButton(`← ${area.name}`, area, 'area'))
+  return section
 }
 
 function buildSectorRouteList(props: Record<string, any>): HTMLElement {

@@ -87,6 +87,7 @@ layers:
           - { key: kind, tag_value: kind }
           - { key: osm_type, tag_value: osm_type }
           - { key: osm_id, tag_value: osm_id, type: long }
+          - { key: sectors, tag_value: sectors }
 
   # ---- bouldering sectors: climbing=crag + climbing:boulder=yes ----
   # These are the immediate relation parents of boulder problems. Site
@@ -119,6 +120,11 @@ layers:
           - { key: kind, tag_value: kind }
           - { key: osm_type, tag_value: osm_type }
           - { key: osm_id, tag_value: osm_id, type: long }
+          - { key: parent_area_id, tag_value: parent_area_id, type: long }
+          - { key: parent_area_name, tag_value: parent_area_name }
+          - { key: parent_area_lon, tag_value: parent_area_lon, type: double }
+          - { key: parent_area_lat, tag_value: parent_area_lat, type: double }
+          - { key: parent_area_sectors, tag_value: parent_area_sectors }
 
   # ---- routes: climbing=route_bottom points ----
   - id: routes

@@ -21,6 +21,8 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      DATA_BRANCH: data-update-${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
       pr-number: ${{ steps.cpr.outputs.pull-request-number }}
     steps:
@@ -68,19 +70,19 @@ jobs:
             exit 0
           fi
 
-          git checkout -B data-update
+          git checkout -B "$DATA_BRANCH"
           git add tiles/climbing.pmtiles
           git commit -m "chore: update worldwide climbing tiles from Overpass"
-          git push --force origin data-update
+          git push --force origin "$DATA_BRANCH"
 
-          if gh pr view data-update --json number --jq .number >/dev/null 2>&1; then
-            PR_NUMBER="$(gh pr view data-update --json number --jq .number)"
-            echo "PR already exists for branch data-update: #$PR_NUMBER"
+          if gh pr view "$DATA_BRANCH" --json number --jq .number >/dev/null 2>&1; then
+            PR_NUMBER="$(gh pr view "$DATA_BRANCH" --json number --jq .number)"
+            echo "PR already exists for branch $DATA_BRANCH: #$PR_NUMBER"
           else
             echo "Creating pull request..."
             if ! PR_URL="$(gh pr create \
                 --base master \
-                --head data-update \
+                --head "$DATA_BRANCH" \
                 --title "chore: update climbing tiles" \
                 --body "Automated worldwide update of \`tiles/climbing.pmtiles\` from the OpenStreetMap Overpass API." 2>/tmp/gh-pr-create.err)"; then
               cat /tmp/gh-pr-create.err >&2
@@ -113,7 +115,7 @@ jobs:
           for i in $(seq 1 60); do
             STATE=$(gh pr view "$PR" --json state --jq .state)
             if [ "$STATE" = "MERGED" ]; then
-              gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/data-update" || true
+              gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$DATA_BRANCH" || true
               echo "PR #$PR merged."
               exit 0
             fi

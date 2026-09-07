@@ -21,3 +21,14 @@ The idea is to create a map where you can see the boulders highlighted and you c
 There are 2 ways to do this? overpass api and rerender the tiles. 
 
 what are pros and cons?
+
+## Idea for editor
+
+I would like this website to have an editor, under openbouldermap/edit. Add a small pencil button on the bottom right. For a v0 edit can only be used to modify existing nodes. In particular:
+* When Clicking on a climbing route I should have a menu on the right where:
+    * I should be able to set image with a wikimedia link (and see the image loading).
+    * I can set if a route is sit or not
+    * I can set the grade
+    * I can set the name
+    * the description
+I can do many changes, finally there should be a button that downloads an openstreetmap changefile that i can then use to modify the real map.

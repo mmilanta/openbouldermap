@@ -16,6 +16,10 @@ export const INITIAL_VIEW = {
 //   https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=YOUR_KEY
 export const BASEMAP_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 
+// Deployment base path (Vite base). Kept in one place so the editor can build
+// absolute URLs for its /edit view without hard-coding the repository path.
+export const BASE_URL = import.meta.env.BASE_URL || '/'
+export const EDIT_PATH = `${BASE_URL}edit`
+
 // The climbing-only PMTiles archive is served as a static file.
-const base = import.meta.env.BASE_URL || '/'
-export const CLIMBING_PMTILES_URL = `pmtiles://${location.origin}${base}tiles/climbing.pmtiles`
+export const CLIMBING_PMTILES_URL = `pmtiles://${location.origin}${BASE_URL}tiles/climbing.pmtiles`

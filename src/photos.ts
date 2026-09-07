@@ -74,7 +74,7 @@ export function allPathTags(props: Record<string, any>): Array<{ image: string; 
  */
 export function renderPhotoBlock(
   imageFilename: string,
-  paths: Array<{ points: PathPoint[]; color: string; label?: string }>,
+  paths: Array<{ points: PathPoint[]; color: string }>,
 ): HTMLElement {
   const container = document.createElement('div')
   container.className = 'photo-block loading'
@@ -119,11 +119,11 @@ export function renderPhotoBlock(
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'path')
         line.setAttribute('d', d)
         line.setAttribute('stroke', p.color)
-        line.setAttribute('stroke-width', '3')
+        line.setAttribute('stroke-width', '6')
         line.setAttribute('stroke-linecap', 'round')
         line.setAttribute('stroke-linejoin', 'round')
         line.setAttribute('fill', 'none')
-        if (dotted) line.setAttribute('stroke-dasharray', '6 4')
+        if (dotted) line.setAttribute('stroke-dasharray', '8 6')
         g.appendChild(line)
       }
 
@@ -146,19 +146,6 @@ export function renderPhotoBlock(
         }
       }
       flush(current.some(pt => pt.dotted))
-
-      // label
-      if (p.label) {
-        const last = p.points[p.points.length - 1]
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text')
-        text.setAttribute('x', String(last.x * w + 6))
-        text.setAttribute('y', String(last.y * h + 4))
-        text.setAttribute('fill', p.color)
-        text.setAttribute('font-size', '13')
-        text.setAttribute('font-weight', '700')
-        text.textContent = p.label
-        g.appendChild(text)
-      }
 
       svg.appendChild(g)
     }

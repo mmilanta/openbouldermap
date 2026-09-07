@@ -125,6 +125,13 @@ html, body, #app { height: 100%; margin: 0; }
   text-align: center;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 }
+.sector-route-arrow {
+  flex: none;
+  color: #2f6b8f;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0 2px;
+}
 .problem-sector-link { margin-top: 16px; }
 .problem-sector-button {
   padding: 0;
@@ -316,3 +323,90 @@ html, body, #app { height: 100%; margin: 0; }
 .path-hint a { color: #2f6b8f; }
 
 .maplibregl-ctrl-attrib { font-size: 10px; }
+
+/* ---- edit mode controls (floating, top-left) ---- */
+.editor-controls {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+}
+.editor-controls [hidden] { display: none !important; }
+
+.edit-toggle {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 999px;
+  background: #2f6b8f;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.edit-toggle:hover { background: #265a78; transform: translateY(-1px); }
+.edit-toggle.editing { background: #8a5a2f; }
+.edit-toggle.editing:hover { background: #744a26; }
+.edit-toggle.osc-toggle {
+  background: #2e7d32;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.edit-toggle.osc-toggle:hover { background: #256b28; }
+.osc-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #2e7d32;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* ---- editor form ---- */
+.editor-status { margin: 4px 0 14px; min-height: 16px; }
+.editor-form { display: flex; flex-direction: column; gap: 12px; }
+.editor-field { display: flex; flex-direction: column; gap: 4px; }
+.editor-field-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a8a8a;
+}
+.editor-input,
+.editor-textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  color: #2c2c2c;
+  padding: 7px 9px;
+  border: 1px solid #d5cfc2;
+  border-radius: 6px;
+  background: #fff;
+}
+.editor-input:focus,
+.editor-textarea:focus {
+  outline: none;
+  border-color: #2f6b8f;
+  box-shadow: 0 0 0 2px rgba(47, 107, 143, 0.15);
+}
+.editor-textarea { resize: vertical; line-height: 1.45; }
+.editor-check-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  color: #2c2c2c;
+  cursor: pointer;
+}
+.editor-check { width: 16px; height: 16px; cursor: pointer; }
+
+.editor-photo-area { margin-top: 2px; }
+

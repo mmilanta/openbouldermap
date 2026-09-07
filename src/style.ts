@@ -21,7 +21,8 @@ export function buildStyle(): StyleSpecification {
       },
       [CLIMBING]: {
         type: 'vector',
-        url: CLIMBING_PMTILES_URL
+        url: CLIMBING_PMTILES_URL,
+        promoteId: { routes: 'osm_id' }
       }
     },
     layers: [
@@ -90,9 +91,24 @@ export function buildStyle(): StyleSpecification {
         paint: {
           'circle-color': gradeColorExpression('climbing:grade:font') as any,
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 5.5, 17, 7],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1.2,
-          'circle-stroke-opacity': 0.9
+          'circle-stroke-color': [
+            'case',
+            ['boolean', ['feature-state', 'selected'], false],
+            '#111111',
+            '#ffffff'
+          ],
+          'circle-stroke-width': [
+            'case',
+            ['boolean', ['feature-state', 'selected'], false],
+            3.5,
+            1.2
+          ],
+          'circle-stroke-opacity': [
+            'case',
+            ['boolean', ['feature-state', 'selected'], false],
+            1,
+            0.9
+          ]
         }
       },
       {

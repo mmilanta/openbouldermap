@@ -17,6 +17,13 @@
       <div id="attribution">
         Basemap © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors
       </div>
+      <div id="editor-controls" class="editor-controls">
+        <button id="osc-toggle" class="edit-toggle osc-toggle" type="button" title="Download OSM changefile" hidden>
+          <span class="osc-label">⬇ Download .osc</span>
+          <span id="osc-count" class="osc-count">0</span>
+        </button>
+        <button id="edit-toggle" class="edit-toggle" type="button" title="Edit OSM data">✎ Edit</button>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -1,8 +1,10 @@
 // Sidebar rendering for selected route / boulder features.
 
-import { parsePath, renderPhotoBlock, createPathEditor, stringifyPath, PathPoint } from './photos'
+import { parsePath, renderPhotoBlock } from './photos'
 import { gradeColor } from './grades'
 import { fetchProblemSector, fetchSectorRoutes, type SectorRoute, type SectorSummary } from './sectorRoutes'
+import { isEditMode, showRouteEditor } from './editor'
+import { selectRoute } from './selection'
 
 function el(tag: string, cls: string, html: string): HTMLElement {
   const n = document.createElement(tag)
@@ -57,10 +59,22 @@ export function setSectorNavigator(navigate: (lon: number, lat: number) => void)
 }
 
 export function hideSidebar(): void {
+  selectRoute(undefined)
   sidebarEl.classList.add('hidden')
 }
 
 export function showRoute(props: Record<string, any>, lon: number, lat: number): void {
+  if (String(props.osm_type ?? 'node') === 'node') {
+    selectRoute(Number(props.osm_id))
+  } else {
+    selectRoute(undefined)
+  }
+
+  if (isEditMode()) {
+    showRouteEditor(props, lon, lat)
+    return
+  }
+
   const grade = pick(props, 'climbing:grade:font')
   const name = pick(props, 'name') ?? 'Untitled route'
   const start = pick(props, 'climbing:start')
@@ -84,18 +98,12 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
     html.push(el('div', 'grade-row', '<span class="grade-chip unknown">grade unknown</span>'))
   }
 
-  // Photo + path overlay
+  // Photo + path overlay (read-only in the viewer; editing lives in /edit)
   if (img && img.startsWith('File:')) {
     const pathStr = pick(props, 'wikimedia_commons:path')
     const existingPoints = parsePath(pathStr)
     const color = grade ? gradeColorFor(grade) : '#9e9e9e'
-    html.push(renderPhotoBlock(img, existingPoints.length > 0 ? [{ points: existingPoints, color, label: grade ?? undefined }] : []))
-    // Edit button + result string
-    html.push(buildPathControls(img, existingPoints, (newPoints) => {
-      showRoute({ ...props, 'wikimedia_commons:path': stringifyPath(newPoints) }, lon, lat)
-    }, () => {
-      showRoute(props, lon, lat)
-    }))
+    html.push(renderPhotoBlock(img, existingPoints.length > 0 ? [{ points: existingPoints, color }] : []))
   }
 
   if (desc) html.push(row('Description', desc))
@@ -117,6 +125,7 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
 }
 
 export function showBoulder(props: Record<string, any>, lon: number, lat: number): void {
+  selectRoute(undefined)
   props = { ...props, __lon: lon, __lat: lat }
   const kind = pick(props, 'kind')
   const fallbackName = kind === 'area' ? 'Unnamed bouldering area' : kind === 'sector' ? 'Unnamed sector' : 'Unnamed boulder'
@@ -194,19 +203,44 @@ function buildAreaSectorLinks(props: Record<string, any>): HTMLElement | undefin
 
   const section = el('section', 'sector-routes hierarchy-links', '')
   section.appendChild(el('h2', 'sector-routes-title', 'Sectors'))
+
+  const list = el('div', 'sector-route-list', '')
   for (const sector of sectors) {
-    if (Number.isFinite(sector.id) && Number.isFinite(sector.lon) && Number.isFinite(sector.lat)) {
-      section.appendChild(hierarchyButton(sector.name || 'Unnamed sector', {
+    if (!Number.isFinite(sector.id) || !Number.isFinite(sector.lon) || !Number.isFinite(sector.lat)) continue
+
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'sector-route'
+
+    const name = document.createElement('span')
+    name.className = 'sector-route-name'
+    name.textContent = sector.name || 'Unnamed sector'
+    button.appendChild(name)
+
+    const arrow = document.createElement('span')
+    arrow.className = 'sector-route-arrow'
+    arrow.textContent = '→'
+    button.appendChild(arrow)
+
+    button.addEventListener('click', () => {
+      const location = {
         ...sector,
         parent_area_id: Number(props.osm_id),
         parent_area_name: pick(props, 'name') ?? 'Unnamed bouldering area',
         parent_area_lon: Number((props as any).__lon),
         parent_area_lat: Number((props as any).__lat),
         parent_area_sectors: raw
-      } as any, 'sector'))
-    }
+      } as any
+      sectorNavigator?.(location.lon, location.lat)
+      showBoulder({ name: location.name, kind: 'sector', osm_id: location.id, osm_type: 'relation', ...location }, location.lon, location.lat)
+    })
+
+    list.appendChild(button)
   }
-  return section.children.length > 1 ? section : undefined
+
+  if (list.children.length === 0) return undefined
+  section.appendChild(list)
+  return section
 }
 
 function buildSectorAreaLink(props: Record<string, any>): HTMLElement | undefined {
@@ -356,68 +390,3 @@ function gradeColorFor(g: string): string {
   return gradeColor(g)
 }
 
-// ---------------------------------------------------------------------------
-//  Path editor controls  (Edit button, serialized result, Copy, iD link)
-// ---------------------------------------------------------------------------
-
-function buildPathControls(
-  imageFilename: string,
-  existingPoints: PathPoint[],
-  onPathChanged: (newPoints: PathPoint[]) => void,
-  onCancel: () => void,
-): HTMLElement {
-  const wrap = document.createElement('div')
-  wrap.className = 'path-controls'
-
-  // Edit button
-  const editBtn = document.createElement('button')
-  editBtn.className = 'path-edit-btn'
-  editBtn.textContent = existingPoints.length > 0 ? '✎ Edit path' : '+ Add path'
-  editBtn.addEventListener('click', () => {
-    createPathEditor(imageFilename, existingPoints, {
-      onDone: onPathChanged,
-      onCancel,
-    })
-  })
-  wrap.appendChild(editBtn)
-
-  // Show serialized path string if it exists
-  if (existingPoints.length > 0) {
-    const str = stringifyPath(existingPoints)
-    const field = document.createElement('div')
-    field.className = 'path-result'
-
-    const input = document.createElement('input')
-    input.type = 'text'
-    input.className = 'path-result-input'
-    input.value = str
-    input.readOnly = true
-    input.title = 'Copy this value into the wikimedia_commons:path tag on OpenStreetMap'
-    field.appendChild(input)
-
-    const copyBtn = document.createElement('button')
-    copyBtn.className = 'path-copy-btn'
-    copyBtn.textContent = 'Copy'
-    copyBtn.addEventListener('click', () => {
-      const fullTag = `wikimedia_commons:path=${str}`
-      navigator.clipboard.writeText(fullTag).then(() => {
-        copyBtn.textContent = 'Copied!'
-        setTimeout(() => { copyBtn.textContent = 'Copy' }, 1500)
-      })
-    })
-    field.appendChild(copyBtn)
-
-    wrap.appendChild(field)
-
-    // iD editor link
-    const hint = document.createElement('div')
-    hint.className = 'path-hint'
-    hint.innerHTML = `
-      Paste the value above into the <code>wikimedia_commons:path</code> tag on
-      <a href="https://www.openstreetmap.org/edit?editor=id" target="_blank" rel="noopener">OpenStreetMap iD editor</a>
-    `
-    wrap.appendChild(hint)
-  }
-
-  return wrap
-}

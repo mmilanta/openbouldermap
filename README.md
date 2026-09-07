@@ -54,6 +54,23 @@ npm run dev        # http://localhost:5173
 5. MapLibre progressively reveals the hierarchy: area names below z13, sector names from z13 to z16, boulder names from z16 to z19, and problem names from z19. Physical boulders and grade-colored problem dots also appear at z13.
 6. Selecting a sector fetches its direct relation members from the live OSM API and shows its problems with grades. Selecting a problem flies the map to it at z19.
 
+## Editor
+
+A small in-browser editor is available under `/edit` (the pencil button in the
+top-left corner of the map). In v0 it can only modify existing bouldering
+route nodes:
+
+- Click a route to open the editor sidebar.
+- Edit the name, Font grade, sit-start flag, description, Wikimedia Commons image,
+  and the route line (`wikimedia_commons:path`) drawn over that image.
+- The form loads the node's current tags and version from the live OSM API.
+- Changes are kept in memory and accumulate across every route you edit. The
+  **⬇ Download .osc** button (next to the exit button, top-left) exports them all
+  as one OsmChange file. Open that file in [JOSM](https://josm.openstreetmap.de/)
+  to review and upload the changes to OpenStreetMap.
+
+Nothing is written to OpenStreetMap automatically.
+
 ## Data model
 
 ### Boulders (areas)

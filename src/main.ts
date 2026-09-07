@@ -3,6 +3,8 @@ import { Protocol } from 'pmtiles'
 import { INITIAL_VIEW } from './config'
 import { buildStyle } from './style'
 import { showRoute, showBoulder, hideSidebar, setRouteNavigator, setSectorNavigator } from './sidebar'
+import { initEditorButton } from './editor'
+import { setSelectionMap } from './selection'
 
 // Register the pmtiles:// protocol so MapLibre can read our static archive.
 const protocol = new Protocol({ metadata: true })
@@ -20,8 +22,12 @@ const map = new maplibregl.Map({
   attributionControl: { compact: true }
 })
 
+setSelectionMap(map)
+
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
+
+initEditorButton()
 
 // Store for debugging
 ;(window as any).__map = map
@@ -36,7 +42,7 @@ setSectorNavigator((lon, lat) => {
 map.on('load', () => {
   // Cursor: pointer over clickable layers.
   const interactiveLayers = [
-    'route-label', 'route-hit', 'route',
+    'route-hit', 'route',
     'boulder-label', 'boulder-point-label', 'boulder', 'boulder-point',
     'sector-label', 'sector', 'area-label', 'area'
   ]
@@ -62,8 +68,9 @@ map.on('click', (e) => {
     return
   }
 
-  // Prefer problems over physical boulder geometry.
-  const routeHits = map.queryRenderedFeatures(e.point, { layers: ['route-label', 'route-hit', 'route'] })
+  // Prefer problems over physical boulder geometry. Route names are not
+  // clickable — selection happens on the grade-colored dot itself.
+  const routeHits = map.queryRenderedFeatures(e.point, { layers: ['route-hit', 'route'] })
   if (routeHits.length > 0) {
     const f = routeHits[0]
     const [lon, lat] = (f.geometry as any).coordinates ?? [e.lngLat.lng, e.lngLat.lat]

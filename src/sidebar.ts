@@ -5,6 +5,7 @@ import { gradeColor } from './grades'
 import { fetchProblemSector, fetchSectorRoutes, type SectorRoute, type SectorSummary } from './sectorRoutes'
 import { isEditMode, showRouteEditor } from './editor'
 import { selectRoute } from './selection'
+import type { NearbyBoulderRoute } from './boulderRoutes'
 
 function el(tag: string, cls: string, html: string): HTMLElement {
   const n = document.createElement(tag)
@@ -124,7 +125,12 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
   loadProblemSectorLink(sectorLink, props, lon, lat)
 }
 
-export function showBoulder(props: Record<string, any>, lon: number, lat: number): void {
+export function showBoulder(
+  props: Record<string, any>,
+  lon: number,
+  lat: number,
+  nearbyRoutes?: NearbyBoulderRoute[]
+): void {
   selectRoute(undefined)
   props = { ...props, __lon: lon, __lat: lat }
   const kind = pick(props, 'kind')
@@ -155,13 +161,17 @@ export function showBoulder(props: Record<string, any>, lon: number, lat: number
       : undefined
   if (hierarchyLinks) html.push(hierarchyLinks)
 
-  const routeList = kind === 'sector' ? buildSectorRouteList(props) : undefined
+  const routeList = kind === 'sector'
+    ? buildSectorRouteList(props)
+    : nearbyRoutes?.length
+      ? buildBoulderRouteList(nearbyRoutes)
+      : undefined
   if (routeList) html.push(routeList)
 
   html.push(el('div', 'links', `<a href="${osmPermalink(lat, lon)}" target="_blank" rel="noopener">view on OSM</a> · <a href="${osmEditLink(lat, lon)}" target="_blank" rel="noopener">edit in iD</a>`))
   render(html)
 
-  if (routeList) loadSectorRoutes(routeList, {
+  if (routeList && kind === 'sector') loadSectorRoutes(routeList, {
     id: Number(props.osm_id),
     name,
     lon,
@@ -256,6 +266,87 @@ function buildSectorAreaLink(props: Record<string, any>): HTMLElement | undefine
   const section = el('section', 'sector-routes hierarchy-links', '')
   section.appendChild(el('h2', 'sector-routes-title', 'Area'))
   section.appendChild(hierarchyButton(`← ${area.name}`, area, 'area'))
+  return section
+}
+
+function imageKey(value: string): string {
+  return value.replace(/^File:/i, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase()
+}
+
+function buildBoulderRouteList(routes: NearbyBoulderRoute[]): HTMLElement {
+  const section = el('section', 'sector-routes boulder-routes', '')
+  section.appendChild(el('h2', 'sector-routes-title', 'Problems'))
+
+  const sorted = [...routes].sort((a, b) => {
+    const aImage = pick(a.properties, 'wikimedia_commons', 'image') ?? ''
+    const bImage = pick(b.properties, 'wikimedia_commons', 'image') ?? ''
+    return imageKey(aImage).localeCompare(imageKey(bImage)) ||
+      String(a.properties.name || '').localeCompare(String(b.properties.name || ''))
+  })
+
+  let previousImage: string | undefined
+  let list: HTMLElement | undefined
+  for (const route of sorted) {
+    const image = pick(route.properties, 'wikimedia_commons', 'image') ?? ''
+    const canonicalImage = imageKey(image)
+    if (canonicalImage !== previousImage) {
+      previousImage = canonicalImage
+      if (image.startsWith('File:')) {
+        const sameImageRoutes = sorted.filter(candidate =>
+          imageKey(pick(candidate.properties, 'wikimedia_commons', 'image') ?? '') === canonicalImage
+        )
+        const paths = sameImageRoutes.flatMap(candidate => {
+          const points = parsePath(pick(candidate.properties, 'wikimedia_commons:path'))
+          if (points.length < 2) return []
+          const grade = pick(candidate.properties, 'climbing:grade:font')
+          return [{
+            points,
+            color: grade ? gradeColorFor(grade) : '#9e9e9e',
+            key: String(candidate.properties.osm_id)
+          }]
+        })
+        section.appendChild(renderPhotoBlock(image, paths))
+      }
+      list = el('div', 'sector-route-list', '')
+      section.appendChild(list)
+    }
+
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'sector-route'
+    const routeKey = String(route.properties.osm_id)
+    button.dataset.routeKey = routeKey
+
+    const routeName = document.createElement('span')
+    routeName.className = 'sector-route-name'
+    routeName.textContent = String(route.properties.name || 'Untitled problem')
+    button.appendChild(routeName)
+
+    const grade = pick(route.properties, 'climbing:grade:font')
+    if (grade) {
+      const badge = document.createElement('span')
+      badge.className = 'sector-route-grade'
+      badge.textContent = grade
+      badge.style.backgroundColor = gradeColorFor(grade)
+      button.appendChild(badge)
+    }
+
+    const highlight = (active: boolean) => {
+      for (const line of section.querySelectorAll<SVGGElement>('.photo-route-line')) {
+        line.classList.toggle('highlighted', active && line.dataset.routeKey === routeKey)
+      }
+    }
+    button.addEventListener('mouseenter', () => highlight(true))
+    button.addEventListener('mouseleave', () => highlight(false))
+    button.addEventListener('focus', () => highlight(true))
+    button.addEventListener('blur', () => highlight(false))
+    button.addEventListener('click', () => {
+      routeNavigator?.(route)
+      showRoute(route.properties, route.lon, route.lat)
+    })
+    list!.appendChild(button)
+  }
+
   return section
 }
 

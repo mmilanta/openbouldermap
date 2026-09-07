@@ -98,6 +98,8 @@ html, body, #app { height: 100%; margin: 0; }
   color: #686868;
 }
 .sector-route-list { display: flex; flex-direction: column; gap: 5px; }
+/* Separate each additional image group from the preceding problem list. */
+.boulder-routes .sector-route-list + .photo-block { margin-top: 20px; }
 .sector-route {
   display: flex;
   align-items: center;
@@ -197,6 +199,11 @@ html, body, #app { height: 100%; margin: 0; }
 }
 .photo-block.editing .photo-overlay {
   pointer-events: none;
+}
+.photo-route-line path { transition: stroke-width 0.12s ease, opacity 0.12s ease; }
+.photo-route-line.highlighted path {
+  stroke-width: 11;
+  opacity: 1;
 }
 
 /* ---- full-page path editor overlay ---- */
@@ -336,22 +343,32 @@ html, body, #app { height: 100%; margin: 0; }
 .editor-controls [hidden] { display: none !important; }
 
 .edit-toggle {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #aaa;
+  border-radius: 50%;
+  background: rgba(238, 238, 238, 0.92);
+  color: #666;
+  font-size: 17px;
+  line-height: 32px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.edit-toggle:hover { background: #ddd; color: #333; }
+.edit-toggle.editing { background: #d5d5d5; color: #555; }
+.edit-toggle.editing:hover { background: #c8c8c8; color: #222; }
+.edit-toggle.osc-toggle {
+  width: auto;
+  height: auto;
   padding: 8px 14px;
   border: none;
   border-radius: 999px;
-  background: #2f6b8f;
+  background: #2e7d32;
   color: #fff;
   font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
-  transition: background 0.15s ease, transform 0.15s ease;
-}
-.edit-toggle:hover { background: #265a78; transform: translateY(-1px); }
-.edit-toggle.editing { background: #8a5a2f; }
-.edit-toggle.editing:hover { background: #744a26; }
-.edit-toggle.osc-toggle {
-  background: #2e7d32;
+  line-height: normal;
   display: inline-flex;
   align-items: center;
   gap: 8px;

@@ -5,6 +5,7 @@ import { buildStyle } from './style'
 import { showRoute, showBoulder, hideSidebar, setRouteNavigator, setSectorNavigator } from './sidebar'
 import { initEditorButton } from './editor'
 import { setSelectionMap } from './selection'
+import { routesOnBoulder, setBoulderRoutesMap } from './boulderRoutes'
 
 // Register the pmtiles:// protocol so MapLibre can read our static archive.
 const protocol = new Protocol({ metadata: true })
@@ -23,6 +24,7 @@ const map = new maplibregl.Map({
 })
 
 setSelectionMap(map)
+setBoulderRoutesMap(map)
 
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
@@ -94,7 +96,13 @@ map.on('click', (e) => {
       : f.layer.id.startsWith('sector')
         ? 'sector'
         : undefined
-    showBoulder({ ...(f.properties ?? {}), ...(layerKind ? { kind: layerKind } : {}) }, lon, lat)
+    const nearbyRoutes = layerKind ? undefined : routesOnBoulder(f)
+    showBoulder(
+      { ...(f.properties ?? {}), ...(layerKind ? { kind: layerKind } : {}) },
+      lon,
+      lat,
+      nearbyRoutes
+    )
     return
   }
   hideSidebar()

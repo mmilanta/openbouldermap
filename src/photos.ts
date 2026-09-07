@@ -74,7 +74,7 @@ export function allPathTags(props: Record<string, any>): Array<{ image: string; 
  */
 export function renderPhotoBlock(
   imageFilename: string,
-  paths: Array<{ points: PathPoint[]; color: string }>,
+  paths: Array<{ points: PathPoint[]; color: string; key?: string }>,
 ): HTMLElement {
   const container = document.createElement('div')
   container.className = 'photo-block loading'
@@ -108,6 +108,8 @@ export function renderPhotoBlock(
     for (const p of paths) {
       if (p.points.length < 2) continue
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+      g.classList.add('photo-route-line')
+      if (p.key) g.dataset.routeKey = p.key
 
       // split path into solid and dotted segments
       let current: PathPoint[] = []
@@ -178,6 +180,7 @@ export function createPathEditor(
   imageFilename: string,
   initialPoints: PathPoint[],
   callbacks: EditorCallbacks,
+  referencePaths: PathPoint[][] = [],
 ): void {
   // --- backdrop ---
   const backdrop = document.createElement('div')
@@ -244,6 +247,22 @@ export function createPathEditor(
   function redraw() {
     svg.innerHTML = ''
     if (imgW === 0 || imgH === 0) return
+
+    // Other routes on this block using the same image provide context without
+    // competing visually with the route currently being edited.
+    for (const reference of referencePaths) {
+      if (reference.length < 2) continue
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline')
+      line.setAttribute('points', reference.map(p => `${p.x * imgW},${p.y * imgH}`).join(' '))
+      line.setAttribute('stroke', '#fff')
+      line.setAttribute('stroke-width', '4')
+      line.setAttribute('stroke-dasharray', '10 8')
+      line.setAttribute('stroke-linecap', 'round')
+      line.setAttribute('stroke-linejoin', 'round')
+      line.setAttribute('fill', 'none')
+      line.setAttribute('opacity', '0.8')
+      svg.appendChild(line)
+    }
 
     if (points.length > 1) {
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline')

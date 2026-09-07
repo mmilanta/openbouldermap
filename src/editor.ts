@@ -7,6 +7,7 @@
 import { parsePath, stringifyPath, createPathEditor, renderPhotoBlock, PathPoint } from './photos'
 import { gradeColor } from './grades'
 import { BASE_URL, EDIT_PATH } from './config'
+import { fetchProblemSector, fetchSectorRoutes, type SectorRoute } from './sectorRoutes'
 
 const sidebarEl = document.getElementById('sidebar')!
 const contentEl = document.getElementById('sidebar-content')!
@@ -32,11 +33,12 @@ export function initEditorButton(): void {
 
   const sync = () => {
     const editing = isEditMode()
-    button.textContent = editing ? '✕ Exit editor' : '✎ Edit'
+    button.textContent = editing ? '✕' : '✎'
     button.classList.toggle('editing', editing)
     button.title = editing
       ? 'Leave the editor and go back to the map'
       : 'Edit bouldering routes'
+    button.setAttribute('aria-label', button.title)
 
     if (oscButton) {
       oscButton.hidden = !editing
@@ -98,6 +100,11 @@ interface RouteEdit {
 
   // Keys whose value the user has explicitly changed while editing.
   dirty: Set<string>
+
+  // Routes in the same sector (the app's current block grouping), used as
+  // reference lines while drawing on a shared image.
+  blockRoutes?: SectorRoute[]
+  blockRoutesLoading?: Promise<SectorRoute[]>
 }
 
 const edits = new Map<number, RouteEdit>()
@@ -155,6 +162,48 @@ function normalizeImage(value: string): string {
 
 function osmPermalink(lat: number, lon: number, zoom = 18): string {
   return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=${zoom}/${lat}/${lon}`
+}
+
+function sameImage(a: string, b: string): boolean {
+  const canonical = (value: string) => normalizeImage(value)
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase()
+  return canonical(a) === canonical(b)
+}
+
+async function loadBlockRoutes(edit: RouteEdit): Promise<SectorRoute[]> {
+  if (edit.blockRoutes) return edit.blockRoutes
+  if (edit.blockRoutesLoading) return edit.blockRoutesLoading
+
+  edit.blockRoutesLoading = (async () => {
+    const sector = await fetchProblemSector(edit.osmType, edit.id)
+    const routes = sector ? await fetchSectorRoutes(sector.id) : []
+    edit.blockRoutes = routes
+    return routes
+  })()
+
+  try {
+    return await edit.blockRoutesLoading
+  } finally {
+    edit.blockRoutesLoading = undefined
+  }
+}
+
+function referencePaths(edit: RouteEdit, routes: SectorRoute[]): PathPoint[][] {
+  return routes.flatMap(route => {
+    const id = Number(route.properties.osm_id)
+    if (id === edit.id) return []
+
+    // Prefer values already changed during this editing session over the live
+    // relation snapshot so switching between routes gives immediate feedback.
+    const localEdit = edits.get(id)
+    const image = localEdit?.image ?? String(route.properties.wikimedia_commons || route.properties.image || '')
+    if (!sameImage(image, edit.image)) return []
+    const path = localEdit?.path ?? String(route.properties['wikimedia_commons:path'] || '')
+    const points = parsePath(path)
+    return points.length > 1 ? [points] : []
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -468,7 +517,21 @@ function buildEditorPathControls(imageFilename: string, edit: RouteEdit): HTMLEl
   const editBtn = document.createElement('button')
   editBtn.className = 'path-edit-btn'
   editBtn.textContent = existingPoints.length > 0 ? '✎ Edit path' : '+ Add path'
-  editBtn.addEventListener('click', () => {
+  editBtn.addEventListener('click', async () => {
+    editBtn.disabled = true
+    const originalLabel = editBtn.textContent
+    editBtn.textContent = 'Loading routes…'
+
+    let otherPaths: PathPoint[][] = []
+    try {
+      otherPaths = referencePaths(edit, await loadBlockRoutes(edit))
+    } catch (error) {
+      console.warn('Could not load other routes on this block', error)
+    } finally {
+      editBtn.disabled = false
+      editBtn.textContent = originalLabel
+    }
+
     createPathEditor(imageFilename, existingPoints, {
       onDone: (newPoints) => {
         edit.path = stringifyPath(newPoints)
@@ -477,7 +540,7 @@ function buildEditorPathControls(imageFilename: string, edit: RouteEdit): HTMLEl
         syncOscButton()
       },
       onCancel: () => {}
-    })
+    }, otherPaths)
   })
   wrap.appendChild(editBtn)
 

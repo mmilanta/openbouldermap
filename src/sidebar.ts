@@ -2,7 +2,7 @@
 
 import { parsePath, renderPhotoBlock } from './photos'
 import { gradeColor } from './grades'
-import { fetchProblemSector, fetchSectorRoutes, type SectorRoute, type SectorSummary } from './sectorRoutes'
+import { fetchProblemSector, fetchSectorArea, fetchAreaSectors, fetchSectorRoutes, type SectorRoute, type SectorSummary } from './sectorRoutes'
 import { isEditMode, showRouteEditor } from './editor'
 import { selectRoute } from './selection'
 import type { NearbyBoulderRoute } from './boulderRoutes'
@@ -155,9 +155,9 @@ export function showBoulder(
   html.push(el('div', 'muted', typeDescription))
 
   const hierarchyLinks = kind === 'area'
-    ? buildAreaSectorLinks(props)
+    ? buildAreaSectorLinks(props) ?? buildAreaSectorsPlaceholder()
     : kind === 'sector'
-      ? buildSectorAreaLink(props)
+      ? buildSectorAreaLink(props) ?? buildSectorAreaPlaceholder()
       : undefined
   if (hierarchyLinks) html.push(hierarchyLinks)
 
@@ -171,6 +171,12 @@ export function showBoulder(
   html.push(el('div', 'links', `<a href="${osmPermalink(lat, lon)}" target="_blank" rel="noopener">view on OSM</a> · <a href="${osmEditLink(lat, lon)}" target="_blank" rel="noopener">edit in iD</a>`))
   render(html)
 
+  if (kind === 'area' && hierarchyLinks?.classList.contains('loading-sector-links')) {
+    void loadAreaSectorLinks(hierarchyLinks, props, lon, lat)
+  }
+  if (kind === 'sector' && hierarchyLinks?.classList.contains('loading-area-link')) {
+    void loadSectorAreaLink(hierarchyLinks, props, lon, lat)
+  }
   if (routeList && kind === 'sector') loadSectorRoutes(routeList, {
     id: Number(props.osm_id),
     name,
@@ -253,6 +259,50 @@ function buildAreaSectorLinks(props: Record<string, any>): HTMLElement | undefin
   return section
 }
 
+function buildAreaSectorsPlaceholder(): HTMLElement {
+  const section = el('section', 'sector-routes hierarchy-links loading-sector-links', '')
+  section.appendChild(el('h2', 'sector-routes-title', 'Sectors'))
+  section.appendChild(el('div', 'muted', 'Loading sectors…'))
+  return section
+}
+
+async function loadAreaSectorLinks(
+  section: HTMLElement,
+  props: Record<string, any>,
+  areaLon: number,
+  areaLat: number
+): Promise<void> {
+  const areaId = Number(props.osm_id)
+  if (!Number.isFinite(areaId)) {
+    section.remove()
+    return
+  }
+
+  try {
+    const sectors = await fetchAreaSectors(areaId)
+    if (!section.isConnected) return
+    if (!sectors.length) {
+      section.replaceChildren(el('h2', 'sector-routes-title', 'Sectors'))
+      section.appendChild(el('div', 'muted', 'No sectors found.'))
+      return
+    }
+
+    // Reuse the normal area renderer so sector navigation retains all parent
+    // metadata when moving down and back up the hierarchy.
+    const rendered = buildAreaSectorLinks({
+      ...props,
+      __lon: areaLon,
+      __lat: areaLat,
+      sectors: JSON.stringify(sectors)
+    })
+    if (rendered) section.replaceWith(rendered)
+  } catch (error) {
+    if (!section.isConnected) return
+    const status = section.querySelector('.muted')
+    if (status) status.textContent = error instanceof Error ? `Could not load sectors: ${error.message}` : 'Could not load sectors.'
+  }
+}
+
 function buildSectorAreaLink(props: Record<string, any>): HTMLElement | undefined {
   const area: HierarchyLocation = {
     id: Number(props.parent_area_id),
@@ -267,6 +317,47 @@ function buildSectorAreaLink(props: Record<string, any>): HTMLElement | undefine
   section.appendChild(el('h2', 'sector-routes-title', 'Area'))
   section.appendChild(hierarchyButton(`← ${area.name}`, area, 'area'))
   return section
+}
+
+function buildSectorAreaPlaceholder(): HTMLElement {
+  const section = el('section', 'sector-routes hierarchy-links loading-area-link', '')
+  section.appendChild(el('h2', 'sector-routes-title', 'Area'))
+  section.appendChild(el('div', 'muted area-link-status', 'Loading area…'))
+  return section
+}
+
+async function loadSectorAreaLink(
+  section: HTMLElement,
+  props: Record<string, any>,
+  sectorLon: number,
+  sectorLat: number
+): Promise<void> {
+  const sectorId = Number(props.osm_id)
+  if (!Number.isFinite(sectorId)) {
+    section.remove()
+    return
+  }
+
+  try {
+    const area = await fetchSectorArea(sectorId)
+    if (!section.isConnected) return
+    if (!area) {
+      section.remove()
+      return
+    }
+
+    // The area relation response has no geometry. Use the sector location as a
+    // safe navigation fallback; the area view still exposes its sectors.
+    section.replaceChildren(el('h2', 'sector-routes-title', 'Area'))
+    section.classList.remove('loading-area-link')
+    section.appendChild(hierarchyButton(`← ${area.name}`, {
+      ...area,
+      lon: sectorLon,
+      lat: sectorLat
+    }, 'area'))
+  } catch {
+    if (section.isConnected) section.remove()
+  }
 }
 
 function imageKey(value: string): string {

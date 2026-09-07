@@ -125,7 +125,15 @@ export function renderPhotoBlock(
         line.setAttribute('stroke-linecap', 'round')
         line.setAttribute('stroke-linejoin', 'round')
         line.setAttribute('fill', 'none')
+        line.classList.add('photo-route-stroke')
         if (dotted) line.setAttribute('stroke-dasharray', '8 6')
+
+        // A hidden copy becomes the white casing when this route is highlighted.
+        const casing = line.cloneNode(true) as SVGPathElement
+        casing.classList.remove('photo-route-stroke')
+        casing.classList.add('photo-route-casing')
+        casing.setAttribute('stroke', '#fff')
+        g.appendChild(casing)
         g.appendChild(line)
       }
 

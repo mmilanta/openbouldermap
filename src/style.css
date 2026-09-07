@@ -201,8 +201,13 @@ html, body, #app { height: 100%; margin: 0; }
   pointer-events: none;
 }
 .photo-route-line path { transition: stroke-width 0.12s ease, opacity 0.12s ease; }
-.photo-route-line.highlighted path {
-  stroke-width: 11;
+.photo-route-casing { opacity: 0; }
+.photo-route-line.highlighted .photo-route-casing {
+  stroke-width: 13;
+  opacity: 1;
+}
+.photo-route-line.highlighted .photo-route-stroke {
+  stroke-width: 9;
   opacity: 1;
 }
 

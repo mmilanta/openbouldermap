@@ -57,14 +57,15 @@ npm run dev        # http://localhost:5173
 ## Editor
 
 A small in-browser editor is available under `/edit` (the pencil button in the
-top-left corner of the map). In v0 it can only modify existing bouldering
-route nodes:
+top-left corner of the map). It can modify existing bouldering route nodes and
+physical boulders:
 
-- Click a route to open the editor sidebar.
-- Edit the name, Font grade, sit-start flag, description, Wikimedia Commons image,
-  and the route line (`wikimedia_commons:path`) drawn over that image.
-- The form loads the node's current tags and version from the live OSM API.
-- Changes are kept in memory and accumulate across every route you edit. The
+- Click a route to edit its name, Font grade, sit-start flag, description,
+  Wikimedia Commons image, and route line (`wikimedia_commons:path`).
+- Click a physical boulder to edit its name. Node, way, and relation boulders
+  are supported.
+- The form loads the element's current tags, geometry, and version from the live OSM API.
+- Changes are kept in memory and accumulate across every feature you edit. The
   **⬇ Download .osc** button (next to the exit button, top-left) exports them all
   as one OsmChange file. Open that file in [JOSM](https://josm.openstreetmap.de/)
   to review and upload the changes to OpenStreetMap.

@@ -3,7 +3,7 @@
 import { parsePath, renderPhotoBlock } from './photos'
 import { gradeColor } from './grades'
 import { fetchProblemSector, fetchSectorArea, fetchAreaSectors, fetchSectorRoutes, type SectorRoute, type SectorSummary } from './sectorRoutes'
-import { isEditMode, showRouteEditor } from './editor'
+import { isEditMode, showBoulderEditor, showRouteEditor, withLocalRouteEdits } from './editor'
 import { selectRoute } from './selection'
 import type { NearbyBoulderRoute } from './boulderRoutes'
 
@@ -134,6 +134,11 @@ export function showBoulder(
   selectRoute(undefined)
   props = { ...props, __lon: lon, __lat: lat }
   const kind = pick(props, 'kind')
+  if (isEditMode() && !kind) {
+    showBoulderEditor(props, lon, lat)
+    return
+  }
+
   const fallbackName = kind === 'area' ? 'Unnamed bouldering area' : kind === 'sector' ? 'Unnamed sector' : 'Unnamed boulder'
   const name = pick(props, 'name') ?? fallbackName
   const desc = pick(props, 'description')
@@ -368,7 +373,12 @@ function buildBoulderRouteList(routes: NearbyBoulderRoute[]): HTMLElement {
   const section = el('section', 'sector-routes boulder-routes', '')
   section.appendChild(el('h2', 'sector-routes-title', 'Problems'))
 
-  const sorted = [...routes].sort((a, b) => {
+  // Nearby routes originate in the static map tiles. Apply any in-memory
+  // editor changes before grouping images and drawing their path overlays.
+  const sorted = routes.map(route => ({
+    ...route,
+    properties: withLocalRouteEdits(route.properties)
+  })).sort((a, b) => {
     const aImage = pick(a.properties, 'wikimedia_commons', 'image') ?? ''
     const bImage = pick(b.properties, 'wikimedia_commons', 'image') ?? ''
     return imageKey(aImage).localeCompare(imageKey(bImage)) ||

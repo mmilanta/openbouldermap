@@ -75,6 +75,40 @@ interface OsmNode {
   tags?: Record<string, string>
 }
 
+type OsmElementType = 'node' | 'way' | 'relation'
+
+interface OsmElementMember {
+  type: OsmElementType
+  ref: number
+  role?: string
+}
+
+interface OsmBoulderElement {
+  type: OsmElementType
+  id: number
+  version?: number
+  lat?: number
+  lon?: number
+  nodes?: number[]
+  members?: OsmElementMember[]
+  tags?: Record<string, string>
+}
+
+interface BoulderEdit {
+  id: number
+  osmType: OsmElementType
+  lat: number
+  lon: number
+  version?: number
+  element?: OsmBoulderElement
+  originalTags: Record<string, string>
+  name: string
+  dirty: boolean
+  liveLoaded: boolean
+  loading: boolean
+  liveError?: string
+}
+
 interface RouteEdit {
   id: number
   osmType: string
@@ -108,9 +142,45 @@ interface RouteEdit {
 }
 
 const edits = new Map<number, RouteEdit>()
+const boulderEdits = new Map<string, BoulderEdit>()
 const nodeCache = new Map<number, Promise<OsmNode>>()
+const boulderElementCache = new Map<string, Promise<OsmBoulderElement>>()
 let currentEditId: number | undefined
+let currentBoulderEditKey: string | undefined
 let previewTimer: number | undefined
+
+/**
+ * Overlay unsaved editor values onto route properties used elsewhere in the
+ * app. This keeps boulder overview lines in sync with the path preview while
+ * an edit is still only held in memory.
+ */
+export function withLocalRouteEdits(properties: Record<string, any>): Record<string, any> {
+  const edit = edits.get(Number(properties.osm_id))
+  if (!edit || edit.dirty.size === 0) return properties
+
+  const result = { ...properties }
+  const setEditedValue = (dirtyKey: string, propertyKey: string, value: string) => {
+    if (edit.dirty.has(dirtyKey)) result[propertyKey] = value
+  }
+
+  setEditedValue('name', 'name', edit.name)
+  setEditedValue('climbing:grade:font', 'climbing:grade:font', normalizeGrade(edit.grade))
+  setEditedValue('description', 'description', edit.description)
+  setEditedValue('wikimedia_commons:path', 'wikimedia_commons:path', edit.path)
+
+  if (edit.dirty.has('wikimedia_commons')) {
+    const image = normalizeImage(edit.image)
+    // Set both supported keys so an old fallback `image` value cannot win when
+    // the Wikimedia image is changed or cleared locally.
+    result.wikimedia_commons = image
+    result.image = image
+  }
+  if (edit.dirty.has('climbing:start')) {
+    result['climbing:start'] = edit.sit ? 'sit' : ''
+  }
+
+  return result
+}
 
 // ---------------------------------------------------------------------------
 //  Helpers
@@ -264,10 +334,142 @@ async function ensureLiveData(edit: RouteEdit): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-//  Editor form
+//  Boulder name editing
+// ---------------------------------------------------------------------------
+
+function boulderEditKey(osmType: string, id: number): string {
+  return `${osmType}/${id}`
+}
+
+function fetchBoulderElement(osmType: OsmElementType, id: number): Promise<OsmBoulderElement> {
+  const key = boulderEditKey(osmType, id)
+  const cached = boulderElementCache.get(key)
+  if (cached) return cached
+
+  const request = fetch(`https://api.openstreetmap.org/api/0.6/${key}.json`)
+    .then(async response => {
+      if (!response.ok) throw new Error(`OpenStreetMap returned ${response.status}`)
+      return response.json() as Promise<{ elements: OsmBoulderElement[] }>
+    })
+    .then(({ elements }) => {
+      const element = elements.find(candidate => candidate.type === osmType && candidate.id === id)
+      if (!element) throw new Error('Boulder not found in OSM API response')
+      return element
+    })
+
+  boulderElementCache.set(key, request)
+  request.catch(() => boulderElementCache.delete(key))
+  return request
+}
+
+async function ensureBoulderLiveData(edit: BoulderEdit): Promise<void> {
+  if (edit.liveLoaded || edit.loading) return
+  edit.loading = true
+  updateBoulderStatus(edit)
+
+  try {
+    const element = await fetchBoulderElement(edit.osmType, edit.id)
+    edit.element = element
+    edit.version = element.version
+    edit.originalTags = { ...(element.tags ?? {}) }
+    if (!edit.dirty) edit.name = edit.originalTags.name ?? ''
+    edit.liveLoaded = true
+    edit.liveError = undefined
+    if (currentBoulderEditKey === boulderEditKey(edit.osmType, edit.id) && !sidebarEl.classList.contains('hidden')) {
+      renderBoulderEditor(edit)
+    }
+  } catch (error) {
+    edit.liveError = error instanceof Error ? error.message : String(error)
+  } finally {
+    edit.loading = false
+    updateBoulderStatus(edit)
+    syncOscButton()
+  }
+}
+
+export function showBoulderEditor(props: Record<string, any>, lon: number, lat: number): void {
+  const osmType = String(props.osm_type ?? '') as OsmElementType
+  const osmId = Number(props.osm_id)
+  if (!Number.isFinite(osmId) || !['node', 'way', 'relation'].includes(osmType)) {
+    renderNotice('This boulder has no editable OSM element.')
+    return
+  }
+
+  const key = boulderEditKey(osmType, osmId)
+  currentBoulderEditKey = key
+  currentEditId = undefined
+  let edit = boulderEdits.get(key)
+  if (!edit) {
+    const name = props.name === undefined || props.name === null ? '' : String(props.name)
+    edit = {
+      id: osmId,
+      osmType,
+      lat,
+      lon,
+      originalTags: name ? { name } : {},
+      name,
+      dirty: false,
+      liveLoaded: false,
+      loading: false
+    }
+    boulderEdits.set(key, edit)
+  }
+
+  renderBoulderEditor(edit)
+  void ensureBoulderLiveData(edit)
+}
+
+function updateBoulderStatus(edit: BoulderEdit): void {
+  if (currentBoulderEditKey !== boulderEditKey(edit.osmType, edit.id)) return
+  const status = document.getElementById('boulder-editor-status')
+  if (!status) return
+  if (edit.liveError) {
+    status.textContent = `Could not load OSM ${edit.osmType} data: ${edit.liveError}`
+  } else if (edit.liveLoaded) {
+    status.textContent = `OSM ${edit.osmType} #${edit.id} · version ${edit.version ?? '?'} · ready to export`
+  } else {
+    status.textContent = `Loading current OSM data for ${edit.osmType} #${edit.id}…`
+  }
+}
+
+function renderBoulderEditor(edit: BoulderEdit): void {
+  contentEl.innerHTML = ''
+  contentEl.appendChild(el('h1', 'route-name', 'Edit boulder'))
+
+  const status = el('div', 'muted editor-status', '')
+  status.id = 'boulder-editor-status'
+  contentEl.appendChild(status)
+
+  const form = document.createElement('form')
+  form.className = 'editor-form'
+  form.addEventListener('submit', event => event.preventDefault())
+
+  const nameInput = document.createElement('input')
+  nameInput.type = 'text'
+  nameInput.className = 'editor-input'
+  nameInput.value = edit.name
+  nameInput.placeholder = 'Boulder name'
+  nameInput.addEventListener('input', () => {
+    edit.name = nameInput.value
+    edit.dirty = true
+    syncOscButton()
+  })
+  form.appendChild(field('Name', nameInput))
+  form.appendChild(el('div', 'muted', 'Changes are kept locally until you download and upload the .osc changefile.'))
+  contentEl.appendChild(form)
+  contentEl.appendChild(el('div', 'links',
+    `<a href="${osmPermalink(edit.lat, edit.lon)}" target="_blank" rel="noopener">view on OSM</a>`))
+
+  sidebarEl.classList.remove('hidden')
+  updateBoulderStatus(edit)
+}
+
+// ---------------------------------------------------------------------------
+//  Route editor form
 // ---------------------------------------------------------------------------
 
 export function showRouteEditor(props: Record<string, any>, lon: number, lat: number): void {
+  currentBoulderEditKey = undefined
   const osmType = String(props.osm_type ?? 'node')
   const osmId = Number(props.osm_id)
 
@@ -624,6 +826,47 @@ function hasChanges(edit: RouteEdit): boolean {
   return !tagsEqual(buildFinalTags(edit), edit.originalTags)
 }
 
+function buildBoulderFinalTags(edit: BoulderEdit): Record<string, string> {
+  const tags = { ...edit.originalTags }
+  const name = edit.name.trim()
+  if (name) tags.name = name
+  else delete tags.name
+  return tags
+}
+
+function boulderHasChanges(edit: BoulderEdit): boolean {
+  return !tagsEqual(buildBoulderFinalTags(edit), edit.originalTags)
+}
+
+function serializeTags(tags: Record<string, string>): string[] {
+  return Object.entries(tags)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `    <tag k="${escapeXml(key)}" v="${escapeXml(value)}" />`)
+}
+
+function buildBoulderChange(edit: BoulderEdit): string | undefined {
+  if (!boulderHasChanges(edit) || !edit.element || edit.version === undefined) return undefined
+
+  const children: string[] = []
+  if (edit.osmType === 'way') {
+    children.push(...(edit.element.nodes ?? []).map(ref => `    <nd ref="${ref}" />`))
+  } else if (edit.osmType === 'relation') {
+    children.push(...(edit.element.members ?? []).map(member =>
+      `    <member type="${member.type}" ref="${member.ref}" role="${escapeXml(member.role ?? '')}" />`
+    ))
+  }
+  children.push(...serializeTags(buildBoulderFinalTags(edit)))
+
+  const coordinates = edit.osmType === 'node'
+    ? ` lat="${edit.element.lat!.toFixed(7)}" lon="${edit.element.lon!.toFixed(7)}"`
+    : ''
+  return [
+    `  <${edit.osmType} id="${edit.id}"${coordinates} version="${edit.version}">`,
+    ...children,
+    `  </${edit.osmType}>`
+  ].join('\n')
+}
+
 function buildNodeChange(edit: RouteEdit): string | undefined {
   if (!hasChanges(edit)) return undefined
 
@@ -645,6 +888,9 @@ function editedClimbCount(): number {
   for (const edit of edits.values()) {
     if (hasChanges(edit)) count++
   }
+  for (const edit of boulderEdits.values()) {
+    if (boulderHasChanges(edit)) count++
+  }
   return count
 }
 
@@ -654,22 +900,27 @@ function syncOscButton(): void {
 }
 
 function downloadOsc(): void {
-  const pending = [...edits.values()].filter(edit => !edit.liveLoaded || edit.version === undefined)
+  const pendingRoutes = [...edits.values()].filter(edit => !edit.liveLoaded || edit.version === undefined)
+  const pendingBoulders = [...boulderEdits.values()].filter(edit =>
+    boulderHasChanges(edit) && (!edit.liveLoaded || edit.version === undefined)
+  )
+  const pending = [...pendingRoutes, ...pendingBoulders]
   if (pending.length > 0) {
     const failed = pending.filter(edit => edit.liveError)
     window.alert(
       failed.length > 0
-        ? `Could not load current OSM data for ${failed.length} route(s). Those changes were not exported.`
-        : `Still loading current OSM data for ${pending.length} route(s). Please wait a moment and try again.`
+        ? `Could not load current OSM data for ${failed.length} edited feature(s). Those changes were not exported.`
+        : `Still loading current OSM data for ${pending.length} edited feature(s). Please wait a moment and try again.`
     )
     return
   }
 
-  const nodes = [...edits.values()]
-    .map(buildNodeChange)
-    .filter((node): node is string => node !== undefined)
+  const elements = [
+    ...[...edits.values()].map(buildNodeChange),
+    ...[...boulderEdits.values()].map(buildBoulderChange)
+  ].filter((element): element is string => element !== undefined)
 
-  if (nodes.length === 0) {
+  if (elements.length === 0) {
     window.alert('No changes yet. Edit a field above first.')
     return
   }
@@ -678,7 +929,7 @@ function downloadOsc(): void {
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<osmChange version="0.6" generator="OpenBoulderMap editor">',
     '  <modify>',
-    nodes.join('\n\n'),
+    elements.join('\n\n'),
     '  </modify>',
     '</osmChange>',
     ''

@@ -1,6 +1,6 @@
 import maplibregl from 'maplibre-gl'
 import { Protocol } from 'pmtiles'
-import { INITIAL_VIEW } from './config'
+import { CLIMBING_METADATA_URL, INITIAL_VIEW } from './config'
 import { buildStyle } from './style'
 import { showRoute, showBoulder, hideSidebar, setRouteNavigator, setSectorNavigator } from './sidebar'
 import { initEditorButton, initEditorMap, isEditMode } from './editor'
@@ -20,7 +20,7 @@ const map = new maplibregl.Map({
   maxZoom: INITIAL_VIEW.maxZoom,
   hash: true,
   preserveDrawingBuffer: true,
-  attributionControl: { compact: true }
+  attributionControl: false
 })
 
 setSelectionMap(map)
@@ -29,7 +29,24 @@ setBoulderRoutesMap(map)
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
 
-initEditorButton()
+// The update date belongs in the attribution bar rather than in a separate
+// map control.
+void fetch(CLIMBING_METADATA_URL)
+  .then(response => {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    return response.json() as Promise<{ updated?: string }>
+  })
+  .then(metadata => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(metadata.updated ?? '')) return
+    const attributionDate = document.getElementById('tile-attribution-date') as HTMLTimeElement | null
+    if (attributionDate) {
+      attributionDate.dateTime = metadata.updated!
+      attributionDate.textContent = metadata.updated!
+    }
+  })
+  .catch(() => { /* The map remains usable if update metadata is unavailable. */ })
+
+initEditorButton(map)
 initEditorMap(map)
 
 // Store for debugging

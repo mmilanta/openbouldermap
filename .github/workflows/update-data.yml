@@ -71,7 +71,7 @@ jobs:
           fi
 
           git checkout -B "$DATA_BRANCH"
-          git add tiles/climbing.pmtiles
+          git add tiles/climbing.pmtiles tiles/climbing-metadata.json
           git commit -m "chore: update worldwide climbing tiles from Overpass"
           git push --force origin "$DATA_BRANCH"
 

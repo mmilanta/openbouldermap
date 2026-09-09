@@ -1,8 +1,9 @@
 import type { StyleSpecification } from 'maplibre-gl'
-import { BASEMAP_TILES, CLIMBING_PMTILES_URL } from './config'
+import { BASEMAP_TILES, CLIMBING_PMTILES_URL, SATELLITE_TILES } from './config'
 import { gradeColorExpression, UNKNOWN_GRADE_COLOR } from './grades'
 
 const BASEMAP = 'basemap'
+const SATELLITE = 'satellite'
 const CLIMBING = 'climbing'
 
 export function buildStyle(): StyleSpecification {
@@ -19,6 +20,15 @@ export function buildStyle(): StyleSpecification {
         minzoom: 0,
         maxzoom: 19
       },
+      [SATELLITE]: {
+        type: 'raster',
+        tiles: [SATELLITE_TILES],
+        tileSize: 256,
+        attribution:
+          'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+        minzoom: 0,
+        maxzoom: 19
+      },
       [CLIMBING]: {
         type: 'vector',
         url: CLIMBING_PMTILES_URL,
@@ -28,6 +38,14 @@ export function buildStyle(): StyleSpecification {
     layers: [
       // ─── basemap (raster) ──────────────────────────────────────────
       { id: 'basemap-raster', type: 'raster', source: BASEMAP, minzoom: 0, maxzoom: 22 },
+      {
+        id: 'satellite-raster',
+        type: 'raster',
+        source: SATELLITE,
+        minzoom: 0,
+        maxzoom: 22,
+        layout: { visibility: 'none' }
+      },
 
       // ─── areas: broad destinations visible at country/region zoom ─
       {

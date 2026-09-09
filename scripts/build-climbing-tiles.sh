@@ -102,6 +102,10 @@ java -Xmx4g -jar planetiler.jar generate-custom \
   --output="$OUTPUT" \
   --force
 
+# Keep a small, cacheable timestamp beside the archive so the UI can tell
+# visitors exactly when this climbing snapshot was generated.
+printf '{\n  "updated": "%s"\n}\n' "$(date -u +%F)" > tiles/climbing-metadata.json
+
 echo ""
 echo "==> Done."
 ls -lh "$OUTPUT"

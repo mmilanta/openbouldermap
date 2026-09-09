@@ -3,13 +3,16 @@ import { EditGraph, groupKind, isBoulder, isRoute, keyOf, pointInRing, type Key,
 import { gradeColor } from '../grades'
 
 export interface Snap { way: Key; segment: number; position: Position; vertex?: number }
+export interface ContextTarget { key: Key; way?: Key; position: Position; x: number; y: number }
 interface Hooks {
   select(key: Key): void
+  context(target: ContextTarget): void
+  dismissContext(): void
   vertex(way: Key, node: Key): void
   createRoute(p: Position, snap?: Snap): void
   createBoulder(points: Position[]): void
-  moveNode(key: Key, p: Position, snap?: Snap): void
-  moveBoulder(key: Key, dx: number, dy: number): void
+  moveNode(key: Key, p: Position, snap?: Snap): Promise<unknown>
+  moveBoulder(key: Key, dx: number, dy: number): Promise<unknown>
   insert(way: Key, segment: number, p: Position): void
   message(text: string): void
   loadVisible(): void
@@ -22,6 +25,7 @@ export class EditingMap {
   tool: 'select' | 'route' | 'boulder' | 'move-boulder' = 'select'
   drawing: Position[] = []
   private ready = false
+  private committingDrag = false
   private drag?: { key: Key; whole: boolean; start: Position; current: Position; moved: boolean; detachedOrigin?: Position }
   private preview = new Map<number, Position>()
   private snap?: Snap
@@ -31,6 +35,9 @@ export class EditingMap {
   constructor(readonly map: LibreMap, readonly graph: EditGraph, readonly hooks: Hooks) {
     map.on('load', () => this.init())
     map.on('click', e => this.click(e))
+    map.on('contextmenu', e => this.context(e))
+    map.on('movestart', () => hooks.dismissContext())
+    map.dragRotate?.disable() // Right-click belongs to editing actions, not map rotation.
     map.on('mousedown', e => this.down(e))
     map.on('mousemove', e => this.move(e))
     map.on('mouseup', e => this.up(e))
@@ -56,9 +63,10 @@ export class EditingMap {
     this.ready = true; this.render(); this.hooks.loadVisible()
   }
   setTool(tool: EditingMap['tool']): void {
+    this.hooks.dismissContext()
     this.cancelDrag(); this.tool = tool; this.drawing = []
     this.map.getCanvas().style.cursor = tool === 'select' ? '' : 'crosshair'
-    this.hooks.message(tool === 'route' ? 'Click to place a route. Hold Alt to avoid snapping.' : tool === 'boulder' ? 'Click perimeter corners, then Finish outline. Escape cancels; Backspace removes the last corner.' : tool === 'move-boulder' ? 'Drag the selected boulder to move it and all attached routes.' : 'Select a route or boulder. Drag selected vertices; click small midpoint handles to add a vertex.')
+    this.hooks.message(tool === 'route' ? 'Click to place a route. Hold Alt to avoid snapping.' : tool === 'boulder' ? 'Click perimeter corners, then click the first or last corner again to close. Enter also finishes; Escape cancels; Backspace removes the last corner.' : tool === 'move-boulder' ? 'Drag the selected boulder to move it and all attached routes.' : 'Select a route or boulder. Drag selected vertices; click small midpoint handles to add a vertex.')
     this.render()
   }
   finish(): void { if (this.tool === 'boulder') this.hooks.createBoulder([...this.drawing]) }
@@ -164,11 +172,43 @@ export class EditingMap {
     return result
   }
   private hits(e: MapMouseEvent, layers: string[]): MapGeoJSONFeature[] { return this.ready ? this.map.queryRenderedFeatures(e.point, { layers }) : [] }
+  private context(e: MapMouseEvent): void {
+    e.preventDefault(); e.originalEvent.preventDefault()
+    this.hooks.dismissContext()
+    if (!this.ready || this.committingDrag || !this.hooks.canInteract()) return
+    if (this.tool !== 'select') {
+      this.hooks.message('Finish or cancel the current drawing/move action before opening object actions.')
+      return
+    }
+    const vertex = this.hits(e, ['edit-vertices']).find(f => f.properties.handle === 'vertex')
+    const localRoute = this.hits(e, ['edit-routes'])[0]
+    const tileRoute = this.hits(e, ['route', 'route-hit'])[0]
+    const localBoulder = this.hits(e, ['edit-boulders', 'edit-outlines'])[0]
+    const tileBoulder = this.hits(e, ['boulder', 'boulder-label'])[0]
+    const feature = vertex ?? localRoute ?? tileRoute ?? localBoulder ?? tileBoulder
+    if (!feature) return
+    const props = feature.properties
+    const key = props.key ?? `${props.osm_type ?? 'node'}/${Number(props.osm_id)}`
+    if (!/^(node|way|relation)\/-?\d+$/.test(key)) return
+    this.hooks.context({ key: key as Key, way: props.way as Key | undefined,
+      position: [e.lngLat.lng, e.lngLat.lat], x: e.originalEvent.clientX, y: e.originalEvent.clientY })
+  }
   private click(e: MapMouseEvent): void {
     if (!this.ready || !this.hooks.canInteract()) return
     if (this.suppressClick) { this.suppressClick = false; return }
     const p: Position = [e.lngLat.lng, e.lngLat.lat]
-    if (this.tool === 'boulder') { this.drawing.push(p); this.render(); return }
+    if (this.tool === 'boulder') {
+      const endpoints = [this.drawing[0], this.drawing[this.drawing.length - 1]].filter(Boolean)
+      const closesOutline = endpoints.some(endpoint => {
+        const screen = this.map.project(endpoint)
+        return Math.hypot(screen.x - e.point.x, screen.y - e.point.y) <= 10
+      })
+      if (closesOutline) {
+        if (this.drawing.length >= 3) this.finish()
+        else this.hooks.message('Place at least three distinct perimeter corners before closing the outline.')
+      } else { this.drawing.push(p); this.render() }
+      return
+    }
     if (this.tool === 'route') { this.hooks.createRoute(p, e.originalEvent.altKey ? undefined : this.snapAt(p)); return }
     const handle = this.hits(e, ['edit-vertices'])[0]
     if (handle) {
@@ -187,7 +227,7 @@ export class EditingMap {
     }
   }
   private down(e: MapMouseEvent): void {
-    if (!this.ready || !this.hooks.canInteract() || e.originalEvent.button !== 0 || this.tool === 'route' || this.tool === 'boulder') return
+    if (!this.ready || this.committingDrag || !this.hooks.canInteract() || e.originalEvent.button !== 0 || this.tool === 'route' || this.tool === 'boulder') return
     const handle = this.hits(e, ['edit-vertices']).find(f => f.properties.handle === 'vertex')
     const route = this.hits(e, ['edit-routes']).find(f => f.properties.key === this.selected)
     const whole = this.tool === 'move-boulder' && this.hits(e, ['edit-boulders']).some(f => f.properties.key === this.selected)
@@ -224,16 +264,30 @@ export class EditingMap {
     }
     this.render()
   }
-  private up(_e: MapMouseEvent): void {
+  private async up(_e: MapMouseEvent): Promise<void> {
     const d = this.drag, snap = this.snap
     if (!d) return
-    this.cancelDrag()
-    if (!d.moved) return
+    if (!d.moved) { this.cancelDrag(); return }
+    this.drag = undefined
+    this.map.dragPan.enable()
+    this.committingDrag = true
     this.suppressClick = true
-    // MapLibre may not emit a click after a drag; don't swallow the next real click.
+    // Keep the dropped geometry visible while first-use reference checks run.
+    // Releasing the gesture must not revert to the graph's old coordinates.
     setTimeout(() => { this.suppressClick = false }, 0)
-    if (d.whole) this.hooks.moveBoulder(d.key, d.current[0] - d.start[0], d.current[1] - d.start[1])
-    else this.hooks.moveNode(d.key, d.current, snap)
+    try {
+      if (d.whole) await this.hooks.moveBoulder(d.key, d.current[0] - d.start[0], d.current[1] - d.start[1])
+      else await this.hooks.moveNode(d.key, d.current, snap)
+    } catch (error) {
+      this.hooks.message(error instanceof Error ? error.message : String(error))
+    } finally {
+      this.committingDrag = false
+      this.preview.clear(); this.snap = undefined
+      this.render() // Commit coordinates, or restore the original geometry on failure.
+    }
   }
-  private cancelDrag(): void { this.drag = undefined; this.preview.clear(); this.snap = undefined; this.map.dragPan.enable(); this.render() }
+  private cancelDrag(): void {
+    if (this.committingDrag) return
+    this.drag = undefined; this.preview.clear(); this.snap = undefined; this.map.dragPan.enable(); this.render()
+  }
 }

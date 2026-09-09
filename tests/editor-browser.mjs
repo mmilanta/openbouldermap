@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises'
 const base = process.env.EDITOR_TEST_URL || 'http://127.0.0.1:5199/openbouldermap/'
 const server = process.env.EDITOR_TEST_URL ? undefined : spawn('node', ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5199', '--strictPort'], { stdio: 'pipe' })
 const errors = [], alerts = []
+let dismissNextConfirmation = false
 let browser
 try {
   for (let i = 0; i < 100; i++) {
@@ -18,7 +19,11 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true })
   page.on('pageerror', e => { errors.push(e.message); console.error(e) })
   if (process.env.DEBUG_EDITOR) page.on('console', m => console.log(m.type(), m.text()))
-  page.on('dialog', async d => { if (d.type() === 'alert') alerts.push(d.message()); await d.accept() })
+  page.on('dialog', async d => {
+    if (d.type() === 'alert') alerts.push(d.message())
+    if (d.type() === 'confirm' && dismissNextConfirmation) { dismissNextConfirmation = false; await d.dismiss() }
+    else await d.accept()
+  })
   // Keep the tests independent of external raster/glyph services.
   await page.route('https://tile.openstreetmap.org/**', r => r.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') }))
   await page.route('https://demotiles.maplibre.org/**', r => r.fulfill({ contentType: 'application/x-protobuf', body: Buffer.alloc(0) }))
@@ -33,10 +38,24 @@ try {
   const graphDraft = () => page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem('openbouldermap.editor.v1')).graph))
   const until = async fn => { for (let i = 0; i < 100; i++) { if (await fn()) return; await page.waitForTimeout(50) } throw new Error('Condition timed out') }
   const drag = async (x, y, tx, ty) => { await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(tx, ty, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(150) }
+  const contextAction = async (x, y, label) => {
+    await page.mouse.click(x, y, { button: 'right' })
+    await page.getByRole('menuitem', { name: label, exact: true }).click()
+  }
+  const controls = await page.evaluate(() => {
+    const download = document.getElementById('osc-toggle')
+    const rect = download.getBoundingClientRect(), font = getComputedStyle(download).font
+    return [...document.querySelectorAll('.geometry-toolbar button:not([hidden])')].map(b => ({
+      aligned: Math.abs(b.getBoundingClientRect().y - rect.y) < 1,
+      sameFont: getComputedStyle(b).font === font
+    }))
+  })
+  assert.ok(controls.every(b => b.aligned && b.sameFont), 'Tools must share the download button’s row and font')
+  assert.equal(await page.getByRole('button', { name: 'Discard local changes', exact: true }).count(), 0)
 
   await clickTool('+ Boulder')
   for (const [x, y] of [[350, 300], [500, 300], [500, 450], [350, 450]]) await page.mouse.click(x, y)
-  await clickTool('Finish outline')
+  await page.mouse.click(350, 300) // Close by clicking the starting vertex again.
   await page.getByRole('heading', { name: 'Edit boulder', exact: true }).waitFor()
   await page.locator('#sidebar').getByLabel('Name', { exact: true }).fill('Browser test rock')
   await page.getByRole('heading', { name: 'Edit boulder', exact: true }).click()
@@ -44,18 +63,24 @@ try {
 
   await clickTool('+ Route'); await page.mouse.click(350, 375)
   await page.getByRole('heading', { name: 'Edit route', exact: true }).waitFor()
-  await page.getByRole('button', { name: 'Detach from boulder', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Attached to Browser test rock', exact: true }).waitFor()
+  assert.equal(await page.locator('#sidebar').getByRole('button', { name: 'Detach from boulder', exact: true }).count(), 0)
   const attached = (await features()).find(f => f.properties.kind === 'route')
   const beforeMove = (await features()).find(f => f.properties.kind === 'boulder').geometry.coordinates[0]
   await drag(350, 375, 320, 375)
   const afterMove = (await features()).find(f => f.properties.kind === 'boulder').geometry.coordinates[0]
   assert.notDeepEqual(afterMove, beforeMove, 'Dragging attached route must reshape boulder')
-  await page.getByRole('button', { name: 'Detach from boulder', exact: true }).click()
+  await contextAction(320, 375, 'Detach from boulder')
   await page.getByText('Independent route. Drop onto').waitFor()
   const detachedOutline = (await features()).find(f => f.properties.kind === 'boulder').geometry
   await drag(320, 375, 250, 375)
   assert.deepEqual((await features()).find(f => f.properties.kind === 'boulder').geometry, detachedOutline)
   assert.notDeepEqual((await features()).find(f => f.properties.kind === 'route').geometry, attached.geometry)
+  await page.mouse.click(250, 375, { button: 'right' })
+  await page.getByRole('menuitem', { name: 'Delete climbing route', exact: true }).waitFor()
+  assert.equal(await page.getByRole('menuitem', { name: 'Detach from boulder', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('menuitem', { name: 'Delete perimeter vertex', exact: true }).count(), 0)
+  await page.keyboard.press('Escape')
 
   // Nested creation stays local to the dialogs until a final atomic link.
   await page.getByRole('button', { name: 'Choose / create sector', exact: true }).click()
@@ -76,7 +101,8 @@ try {
   await clickTool('Redo'); await page.locator('#sidebar').getByRole('button', { name: 'Test sector', exact: true }).waitFor()
 
   // Export must preserve the session and must not make any write request.
-  await clickTool('Review changes')
+  assert.equal(await page.locator('.geometry-toolbar').getByRole('button', { name: 'Review changes', exact: true }).count(), 0)
+  await page.locator('#osc-toggle').click() // The single download entry point opens review.
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Check current OSM data and download .osc', exact: true }).click()
   const download = await downloadPromise
@@ -101,13 +127,14 @@ try {
   await page.getByRole('heading', { name: 'Edit route', exact: true }).waitFor()
   const beforeJoin = (await features()).find(f => f.properties.kind === 'boulder').geometry.coordinates[0]
   await drag(routeScreen.x, routeScreen.y, 500, 300)
-  await page.getByRole('button', { name: 'Detach from boulder', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Attached to Browser test rock', exact: true }).waitFor()
   assert.deepEqual((await features()).find(f => f.properties.kind === 'boulder').geometry.coordinates[0], beforeJoin, 'Joining an existing vertex must not insert a duplicate')
-  await page.getByRole('button', { name: 'Delete route', exact: true }).click()
+  assert.equal(await page.locator('#sidebar').getByRole('button', { name: 'Delete route', exact: true }).count(), 0)
+  await contextAction(500, 300, 'Delete climbing route')
   await page.getByRole('heading', { name: 'Boulder perimeter vertex', exact: true }).waitFor()
   assert.equal((await features()).filter(f => f.properties.kind === 'route').length, 0)
   assert.deepEqual((await features()).find(f => f.properties.kind === 'boulder').geometry.coordinates[0], beforeJoin)
-  await page.getByRole('button', { name: 'Delete perimeter vertex', exact: true }).click()
+  await contextAction(500, 300, 'Delete perimeter vertex')
   await page.getByRole('heading', { name: 'Edit boulder', exact: true }).waitFor()
   assert.equal((await features()).find(f => f.properties.kind === 'boulder').geometry.coordinates[0].length, beforeJoin.length - 1)
 
@@ -120,9 +147,45 @@ try {
   await page.getByRole('button', { name: 'Delete area', exact: true }).click()
   await until(async () => !Object.values((await graphDraft()).state.overrides).some(e => e?.tags?.climbing === 'area'))
   assert.ok(Object.values((await graphDraft()).state.overrides).some(e => e?.tags?.climbing === 'crag'))
-  await clickTool('Discard local changes')
-  await until(async () => (await features()).length === 0)
+  // Right-click works on an unselected boulder, not just the selected sidebar object.
+  await contextAction(400, 390, 'Delete boulder')
+  await until(async () => !(await features()).some(f => f.properties.kind === 'boulder'))
+  await clickTool('Undo')
+  await until(async () => (await features()).some(f => f.properties.kind === 'boulder'))
+
+  // Escape dismisses a context menu without deleting anything.
+  await page.waitForFunction(() => window.__map.queryRenderedFeatures({ layers: ['edit-boulders'] }).length > 0)
+  await page.mouse.click(400, 390, { button: 'right' })
+  await page.getByRole('menuitem', { name: 'Delete boulder', exact: true }).waitFor()
+  await page.keyboard.press('ArrowUp')
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Delete boulder')
+  await page.keyboard.press('ArrowDown')
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Move entire boulder')
+  await page.keyboard.press('Escape')
+  assert.equal(await page.getByRole('menu').count(), 0)
+
+  // The existing X is the only discard/exit action, and cancelling preserves work.
+  const beforeExit = await graphDraft()
+  dismissNextConfirmation = true
+  await page.locator('#edit-toggle').click()
+  assert.deepEqual((await graphDraft()).state, beforeExit.state)
+  assert.ok(new URL(page.url()).pathname.endsWith('/edit'))
+  await page.locator('#edit-toggle').click()
+  await page.waitForURL(url => url.pathname === new URL(base).pathname)
   assert.equal(await page.evaluate(() => localStorage.getItem('openbouldermap.editor.v1')), null)
+  await page.locator('#edit-toggle').click()
+  await page.waitForFunction(() => window.__map?.getLayer('edit-vertices'))
+
+  // Clicking the last vertex again also finishes, without duplicating it.
+  await clickTool('+ Boulder')
+  for (const [x, y] of [[350, 300], [500, 300], [500, 450]]) await page.mouse.click(x, y)
+  await page.mouse.click(500, 450)
+  await page.getByRole('heading', { name: 'Edit boulder', exact: true }).waitFor()
+  const closed = (await features()).find(f => f.properties.kind === 'boulder').geometry.coordinates[0]
+  assert.equal(closed.length, 4)
+  assert.deepEqual(closed[0], closed.at(-1))
+  await clickTool('Undo')
+  assert.equal((await features()).filter(f => f.properties.kind === 'boulder').length, 0)
   assert.deepEqual(alerts, []); assert.deepEqual(errors, [])
   console.log('Browser editor workflow passed: draw, snap/join, drag, detach, inline hierarchy, undo/redo, export, recovery, safe deletion, search and discard.')
 } finally {

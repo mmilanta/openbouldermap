@@ -62,17 +62,18 @@ top-left corner). The agreed scope is in
 
 ### Geometry and details
 
-- **+ Boulder**: click perimeter corners, then **Finish outline** (or Enter).
+- **+ Boulder**: click at least three perimeter corners, then click the starting
+  corner or the last corner again to close the outline (or press Enter).
   Escape cancels; Backspace removes the last unfinished corner.
 - Select a boulder to drag its vertices, insert vertices using the small midpoint
-  handles, or select an ordinary vertex and delete it. **Move entire boulder**
+  handles, or right-click an ordinary vertex and choose **Delete perimeter vertex**. **Move entire boulder**
   moves the outline and all attached routes together.
 - **+ Route**: click to place a standalone route or snap it onto a boulder edge.
   Dropping onto an ordinary existing vertex joins the points rather than creating
   duplicates. Vertices already representing another route cannot be joined.
 - An attached route **is the perimeter node**: moving it reshapes the rock.
-  **Detach from boulder** leaves an ordinary vertex behind and lets the route move
-  independently. Hold **Alt** to avoid snapping when placing or dragging a route.
+  Right-click the route and choose **Detach from boulder** to leave an ordinary
+  vertex behind and move the route independently. Hold **Alt** to avoid snapping when placing or dragging a route.
 - Edit route names, Font grades, start types, descriptions, Commons photographs,
   and photo route lines (`wikimedia_commons:path`). Boulders support name and
   description editing.
@@ -97,6 +98,10 @@ top-left corner). The agreed scope is in
 
 ### Safe deletion, drafts, and export
 
+- Right-click a route, boulder, or perimeter vertex for its delete action. Attached
+  routes also offer **Detach from boulder**, and boulders offer **Move entire boulder**.
+  These geometry actions are not in the sidebar. Escape or clicking elsewhere
+  dismisses the menu without changing anything.
 - Deleting an attached route leaves its perimeter vertex. Deleting a boulder
   preserves its routes and their sector memberships. Deleting a sector or area
   deletes only the relationship, never its contents. Unlinking is separate from
@@ -106,13 +111,15 @@ top-left corner). The agreed scope is in
   text fields.
 - Unpublished drafts, including undo history and original OSM versions, are saved
   in browser local storage. On return, choose whether to restore or discard the
-  draft. **Discard local changes** clears the entire session. If browser storage
+  draft. The top-row **✕** asks for confirmation, then discards all local changes
+  and the saved draft and leaves edit mode; Cancel keeps your work. If browser storage
   is unavailable or full, the editor warns that the draft is not saved. Detail
   edits and completed geometry/linking actions are recoverable; unfinished
   outlines, photo drawings, and parent-creation dialogs are not. Leaving with an
   unfinished action prompts a warning.
-- **Review changes** or **⬇ Download .osc** shows all creations, modifications,
-  deletions, geometry changes, membership changes, and validation warnings.
+- **⬇ Download .osc** opens the review/confirmation dialog showing all creations,
+  modifications, deletions, geometry changes, membership changes, and validation
+  warnings. Download the changefile from that dialog after reviewing it.
 - Before downloading, the editor checks affected original versions and known
   references against live OSM. Network failures or detected conflicts block
   export without discarding the local work. JOSM must still perform its own

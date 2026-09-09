@@ -5,7 +5,8 @@ import { createPathEditor, parsePath, stringifyPath, renderPhotoBlock } from './
 import { gradeColor } from './grades'
 import { EditGraph, groupKind, isBoulder, isRoute, keyOf, type Element, type Key, type Position } from './editing/model'
 import { OsmReader } from './editing/osm'
-import { EditingMap, type Snap } from './editing/map'
+import { EditingMap, type Snap, type ContextTarget } from './editing/map'
+import { MapContextMenu, type ContextAction } from './editing/context-menu'
 
 const graph = new EditGraph()
 const reader = new OsmReader(graph)
@@ -22,6 +23,7 @@ let visibleLoad: Promise<void> | undefined
 const visibleLoaded = new Set<Key>()
 const visibleFailed = new Set<Key>()
 let reviewDialog: HTMLDialogElement | undefined
+let contextMenu: MapContextMenu | undefined
 
 export function isEditMode(): boolean {
   return location.pathname.replace(/\/+$/, '') === EDIT_PATH.replace(/\/+$/, '') || new URLSearchParams(location.search).get('edit') === '1'
@@ -55,41 +57,51 @@ export function initEditorButton(): void {
   const exportButton = document.getElementById('osc-toggle') as HTMLButtonElement
   const editing = isEditMode()
   toggle.textContent = editing ? '✕' : '✎'
-  toggle.title = editing ? 'Leave edit mode (local draft is retained)' : 'Edit OpenStreetMap features'
+  toggle.title = editing ? 'Discard local changes and leave edit mode' : 'Edit OpenStreetMap features'
   toggle.setAttribute('aria-label', toggle.title)
   toggle.classList.toggle('editing', editing)
   exportButton.hidden = !editing
-  toggle.addEventListener('click', () => {
+  exportButton.title = 'Review local changes and download an OSM changefile'
+  toggle.addEventListener('click', async () => {
     if (busy) return
-    if (editing && !draftSaved && graph.changes().length && !confirm('Your draft could not be saved. Leave and lose local work?')) return
+    if (editing) {
+      if (!confirm('Leave edit mode and discard ALL local changes and the saved draft? This cannot be undone. Download your .osc file first if you want to keep the changes.')) return
+      const discarded = await run(async () => {
+        await visibleLoad?.catch(() => {})
+        // Remove the recoverable copy before throwing away the in-memory edits.
+        localStorage.removeItem(DRAFT_KEY)
+        contextMenu?.close(); editingMap?.cancel(); graph.discard(); graph.base = {}
+        reader.reset(); visibleLoaded.clear(); visibleFailed.clear(); selected = undefined
+        editingMap?.select(undefined)
+      })
+      if (!discarded) return
+    }
     location.assign(`${editing ? BASE_URL : EDIT_PATH}${location.hash}`)
   })
   exportButton.addEventListener('click', showReview)
   if (!editing) return
+  contextMenu = new MapContextMenu()
   toolbar = node('div', '', 'geometry-toolbar')
   toolbar.setAttribute('aria-label', 'Editing tools')
   const tools: [string, string, () => void][] = [
     ['route', '+ Route', () => void run(async () => { await loadVisible(); editingMap?.setTool('route') })],
     ['boulder', '+ Boulder', () => editingMap?.setTool('boulder')],
-    ['finish', 'Finish outline', () => editingMap?.finish()],
     ['cancel', 'Cancel action', () => editingMap?.cancel()],
     ['undo', 'Undo', () => { editingMap?.cancel(); graph.undo(); renderSelected() }],
     ['redo', 'Redo', () => { editingMap?.cancel(); graph.redo(); renderSelected() }],
-    ['find', 'Find sector / area', () => findGroup()],
-    ['review', 'Review changes', showReview],
-    ['discard', 'Discard local changes', () => {
-      if (busy || !confirm('Discard ALL local edits, including new features and pending deletions? This cannot be undone.')) return
-      void run(async () => {
-        await visibleLoad?.catch(() => {})
-        editingMap?.cancel(); graph.discard(); graph.base = {}; reader.reset(); visibleLoaded.clear(); visibleFailed.clear(); selected = undefined; editingMap?.select(undefined)
-        content.replaceChildren(node('p', 'All local changes discarded.')); message('Local edits discarded.'); await loadVisible()
-      })
-    }]
+    ['find', 'Find sector / area', () => findGroup()]
   ]
-  for (const [id, title, action] of tools) { const b = button(title, () => { if (!busy) action() }); b.dataset.tool = id; toolbar.append(b) }
+  const icons: Record<string, string> = { undo: '↶', redo: '↷' }
+  for (const [id, title, action] of tools) {
+    const b = button(icons[id] ?? title, () => { if (!busy) action() })
+    b.className = `edit-toggle editor-tool${icons[id] ? ' editor-tool-icon' : ''}`
+    b.title = title; b.setAttribute('aria-label', title); b.dataset.tool = id
+    toolbar.append(b)
+  }
   messageEl = node('div', 'Local edits only · Select a feature, or create a route or boulder.', 'editing-message')
   messageEl.setAttribute('role', 'status'); messageEl.setAttribute('aria-live', 'polite')
-  document.getElementById('app')!.append(toolbar, messageEl)
+  document.getElementById('editor-controls')!.insertBefore(toolbar, toggle)
+  document.getElementById('app')!.append(messageEl)
   try {
     const saved = localStorage.getItem(DRAFT_KEY)
     if (saved) {
@@ -100,12 +112,12 @@ export function initEditorButton(): void {
         message('Draft restored. Original OSM versions will be checked before export. Nothing has been published.')
       } else localStorage.removeItem(DRAFT_KEY)
     }
-  } catch (error) { draftSaved = false; message(`Could not restore draft: ${errorMessage(error)}. Use Discard local changes to clear it.`) }
+  } catch (error) { draftSaved = false; message(`Could not restore draft: ${errorMessage(error)}. Use ✕ to discard the draft and leave edit mode.`) }
   window.addEventListener('beforeunload', event => {
     if ((!draftSaved && graph.changes().length) || busy || editingMap?.drawing.length || document.querySelector('dialog[open] details[open], .editor-backdrop')) { event.preventDefault(); event.returnValue = '' }
   })
   window.addEventListener('keydown', event => {
-    if (busy || document.querySelector('dialog[open], .editor-backdrop') || (event.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return
+    if (busy || document.querySelector('dialog[open], .editor-backdrop, .map-context-menu') || (event.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return
     if (event.key === 'Escape') editingMap?.cancel()
     if (event.key === 'Enter' && editingMap?.tool === 'boulder') editingMap.finish()
     if (event.key === 'Backspace' && editingMap?.tool === 'boulder') { event.preventDefault(); editingMap.drawing.pop(); editingMap.render() }
@@ -119,12 +131,14 @@ function syncToolbar(): void {
   const count = graph.changes().length
   document.getElementById('osc-count')!.textContent = String(count)
   for (const b of toolbar?.querySelectorAll('button') ?? []) {
-    b.disabled = busy || b.dataset.tool === 'undo' && !graph.undoLabel || b.dataset.tool === 'redo' && !graph.redoLabel || b.dataset.tool === 'finish' && editingMap?.tool !== 'boulder'
+    b.disabled = busy || b.dataset.tool === 'undo' && !graph.undoLabel || b.dataset.tool === 'redo' && !graph.redoLabel
+    if (b.dataset.tool === 'cancel') b.hidden = !editingMap || editingMap.tool === 'select'
     if (b.dataset.tool === 'route' || b.dataset.tool === 'boulder') b.setAttribute('aria-pressed', String(b.dataset.tool === editingMap?.tool))
     if (b.dataset.tool === 'undo') b.title = graph.undoLabel ?? 'Nothing to undo'
     if (b.dataset.tool === 'redo') b.title = graph.redoLabel ?? 'Nothing to redo'
   }
   ;(document.getElementById('osc-toggle') as HTMLButtonElement).disabled = busy
+  ;(document.getElementById('edit-toggle') as HTMLButtonElement).disabled = busy
   toolbar?.classList.toggle('is-busy', busy)
 }
 export function initEditorMap(map: LibreMap): void {
@@ -134,6 +148,8 @@ export function initEditorMap(map: LibreMap): void {
     message,
     loadVisible: () => { void loadVisible().catch(error => message(`Could not load snapping geometry: ${errorMessage(error)}. Select a boulder to retry.`)) },
     select: key => void select(key),
+    context: target => openObjectMenu(target),
+    dismissContext: () => contextMenu?.close(),
     vertex: (way, vertex) => renderVertex(way, vertex),
     createRoute: (p, snap) => void run(async () => {
       await prepareSnap(snap)
@@ -147,14 +163,14 @@ export function initEditorMap(map: LibreMap): void {
       graph.transaction('Create boulder', () => { key = keyOf(graph.addBoulder(points)) })
       editingMap!.setTool('select'); selectLocal(key!)
     }),
-    moveNode: (key, p, snap) => void run(async () => {
+    moveNode: (key, p, snap) => run(async () => {
       await reader.geometry([key]); await prepareSnap(snap)
       graph.transaction(snap ? 'Attach route to boulder' : 'Move shared vertex / route', () => {
         if (snap) graph.attach(key, snap.way, snap.segment, snap.position, snap.vertex)
         else graph.moveNode(key, p)
       }); renderSelected()
     }),
-    moveBoulder: (key, dx, dy) => void run(async () => {
+    moveBoulder: (key, dx, dy) => run(async () => {
       const nodes = [...new Set(graph.rings(key).flatMap(w => w.nodes!))].map(id => `node/${id}` as Key)
       await reader.geometry(nodes)
       graph.transaction('Move entire boulder and attached routes', () => graph.moveBoulder(key, dx, dy)); editingMap!.setTool('select'); renderSelected()
@@ -166,6 +182,59 @@ export function initEditorMap(map: LibreMap): void {
     })
   })
 }
+function openObjectMenu(target: ContextTarget): void {
+  if (busy || !contextMenu || !editingMap) return
+  const token = contextMenu.open(target.x, target.y)
+  void run(async () => {
+    await reader.select(target.key)
+    if (!contextMenu!.isOpen(token)) return
+    let key = target.key, way = target.way
+    let feature = graph.require(key)
+    // A right-click on an unselected boulder's actual corner targets that vertex,
+    // even though its editing handles were not visible before the click.
+    if (isBoulder(feature) && feature.type !== 'node') {
+      const snap = editingMap!.snapAt(target.position)
+      if (snap?.vertex !== undefined && graph.rings(key).some(ring => keyOf(ring) === snap.way)) {
+        key = `node/${snap.vertex}`; way = snap.way
+        await reader.select(key)
+        if (!contextMenu!.isOpen(token)) return
+        feature = graph.require(key)
+      }
+    }
+    const actions: ContextAction[] = []
+    let title = feature.tags.name || key
+    if (isRoute(feature)) {
+      selected = key; editingMap!.select(key); renderSelected()
+      title = feature.tags.name || 'Climbing route'
+      if (graph.attached(key).length) actions.push({ label: 'Detach from boulder', run: () => void run(async () => {
+        await reader.geometry([key])
+        graph.transaction('Detach route from boulder', () => graph.detach(key)); renderSelected()
+        message('Detached. Drag the route away freely; hold Alt to prevent snapping elsewhere.')
+      }) })
+      actions.push({ label: 'Delete climbing route', danger: true, run: () => deleteSelected(key) })
+    } else if (feature.type === 'node' && way) {
+      const ring = graph.require(way)
+      const owner = isBoulder(ring) ? ring : graph.parents(way).find(isBoulder)
+      if (!owner) throw new Error('This vertex does not belong to an editable boulder.')
+      selected = keyOf(owner); editingMap!.select(selected)
+      editingMap!.vertexSelection = { way, node: key }; renderVertex(way, key)
+      title = 'Boulder perimeter vertex'
+      const ringKey = way
+      actions.push({ label: 'Delete perimeter vertex', danger: true, run: () => void run(async () => {
+        await reader.references(key)
+        graph.transaction('Remove perimeter vertex', () => graph.removeVertex(ringKey, key))
+        editingMap!.vertexSelection = undefined; renderSelected()
+      }) })
+    } else if (isBoulder(feature) && feature.type !== 'node') {
+      selected = key; editingMap!.select(key); renderSelected()
+      title = feature.tags.name || 'Boulder'
+      actions.push({ label: 'Move entire boulder', run: () => editingMap!.setTool('move-boulder') },
+        { label: 'Delete boulder', danger: true, run: () => deleteSelected(key) })
+    }
+    if (contextMenu!.isOpen(token)) contextMenu!.fill(title, actions)
+  }).then(success => { if (!success && contextMenu?.isOpen(token)) contextMenu.close() })
+}
+
 async function loadVisible(): Promise<void> {
   if (!editingMap || !editingMap.map.getLayer('edit-vertices')) return
   if (visibleLoad) return visibleLoad
@@ -270,11 +339,7 @@ function renderSelected(): void {
         const owner = isBoulder(w) ? w : graph.parents(keyOf(w)).find(isBoulder) ?? w
         form.append(button(`Attached to ${owner.tags.name || keyOf(owner)}`, () => void select(keyOf(owner))))
       }
-      form.append(node('p', 'Moving this route also reshapes the boulder.', 'muted'))
-      form.append(button('Detach from boulder', () => void run(async () => {
-        await reader.geometry([key]); graph.transaction('Detach route from boulder', () => graph.detach(key)); renderSelected()
-        message('Detached. Drag the route away freely; it will not immediately snap back to the separation point. Hold Alt to prevent snapping elsewhere.')
-      })))
+      form.append(node('p', 'Moving this route also reshapes the boulder. Right-click the route to detach it or delete it.', 'muted'))
     } else form.append(node('p', 'Independent route. Drop onto a boulder edge to attach; hold Alt to keep it independent.', 'muted'))
     renderMembership(form, key, 'sector')
   } else if (isBoulder(e)) {
@@ -282,7 +347,7 @@ function renderSelected(): void {
     else {
       try {
         const rings = graph.rings(key)
-        form.append(node('p', 'Drag a vertex to reshape. Click a small midpoint to insert a vertex. Select an ordinary vertex to remove it.', 'muted'))
+        form.append(node('p', 'Drag a vertex to reshape. Click a small midpoint to insert a vertex. Right-click an ordinary vertex to remove it, or right-click the boulder to delete it.', 'muted'))
         form.append(button('Move entire boulder', () => editingMap?.setTool('move-boulder')))
         const routes = [...new Set(rings.flatMap(w => w.nodes!))].flatMap(id => { const n = graph.get(`node/${id}`); return isRoute(n) ? [n!] : [] })
         form.append(node('h2', 'Attached routes', 'sector-routes-title'))
@@ -298,18 +363,15 @@ function renderSelected(): void {
     }
     if (!e.members?.length) form.append(node('p', 'No members.', 'muted'))
   }
-  if (!(isBoulder(e) && e.type === 'node')) form.append(button(`Delete ${title}`, () => deleteSelected(key), 'danger'))
+  if (kind) form.append(button(`Delete ${title}`, () => deleteSelected(key), 'danger'))
   if (e.id > 0) {
     const link = node('a', 'View object on OpenStreetMap'); link.href = `https://www.openstreetmap.org/${key}`; link.target = '_blank'; link.rel = 'noopener'; content.append(link)
   }
 }
 function renderVertex(way: Key, vertex: Key): void {
   beginPanel('Boulder perimeter vertex')
-  content.append(node('p', vertex), node('p', 'Drag this point to reshape the boulder, or remove it to connect its neighbours.'))
-  content.append(button('Delete perimeter vertex', () => void run(async () => {
-    await reader.references(vertex)
-    graph.transaction('Remove perimeter vertex', () => graph.removeVertex(way, vertex)); editingMap!.vertexSelection = undefined; renderSelected()
-  }), 'danger'), button('Back to feature', renderSelected))
+  content.append(node('p', vertex), node('p', 'Drag this point to reshape the boulder. Right-click it and choose Delete perimeter vertex to connect its neighbours.'))
+  content.append(button('Back to feature', renderSelected))
 }
 function renderMembership(parent: HTMLElement, key: Key, kind: 'sector' | 'area'): void {
   const groups = kind === 'sector' ? graph.sectors(key) : graph.areas(key)

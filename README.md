@@ -167,10 +167,10 @@ Areas and sectors are represented by clickable names without dot markers. At z13
 physical boulders and problem dots appear. Boulder names replace sector names at z16
 and stay above the problem dots until problem names replace them at z19.
 
-## Weekly worldwide data updates
+## Daily worldwide data updates
 
 The repo ships with a fully automated data pipeline
-([`.github/workflows/update-data.yml`](.github/workflows/update-data.yml)) that runs every Friday
+([`.github/workflows/update-data.yml`](.github/workflows/update-data.yml)) that runs every day
 at 05:17 UTC:
 
 1. **Download** — runs one global climbing-key query against the Overpass API. The tag-indexed
@@ -183,7 +183,7 @@ at 05:17 UTC:
 5. **Deploy** — deploys the merged result to GitHub Pages (the merge uses `GITHUB_TOKEN`, so
    the normal push-triggered deploy does not fire for it).
 
-Run it any time with the **Run workflow** button (Actions → Weekly worldwide data update).
+Run it any time with the **Run workflow** button (Actions → Daily worldwide data update).
 
 > **Required repo setting**: to create PRs, the pipeline needs **Settings → Actions → General →
 > Workflow permissions → "Allow GitHub Actions to create and approve pull requests"** enabled
@@ -191,7 +191,7 @@ Run it any time with the **Run workflow** button (Actions → Weekly worldwide d
 > the PR step fails.
 
 > Note: OSM metadata can change even when no new boulders were mapped, so the workflow may
-> create an update PR every week.
+> create an update PR every day.
 
 ## OSM data coverage
 

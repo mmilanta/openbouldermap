@@ -1,10 +1,10 @@
-name: Weekly worldwide data update
+name: Daily worldwide data update
 
-# Refresh worldwide climbing data from OpenStreetMap Overpass every Friday and
+# Refresh worldwide climbing data from OpenStreetMap Overpass every day and
 # manually via "Run workflow".
 on:
   schedule:
-    - cron: '17 5 * * 5'
+    - cron: '17 5 * * *'
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: weekly-worldwide-data-update
+  group: daily-worldwide-data-update
   cancel-in-progress: false
 
 jobs:

@@ -134,7 +134,7 @@ export function showBoulder(
   selectRoute(undefined)
   props = { ...props, __lon: lon, __lat: lat }
   const kind = pick(props, 'kind')
-  if (isEditMode() && !kind) {
+  if (isEditMode()) {
     showBoulderEditor(props, lon, lat)
     return
   }

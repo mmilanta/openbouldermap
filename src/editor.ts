@@ -1,947 +1,481 @@
-// In-browser editor for existing bouldering route nodes.
-//
-// v0 scope: modify route nodes only. The editor accumulates tag changes in
-// memory and finally exports them as an OSM OsmChange (.osc) file that can be
-// uploaded with JOSM / iD / osmium. No data is written anywhere automatically.
-
-import { parsePath, stringifyPath, createPathEditor, renderPhotoBlock, PathPoint } from './photos'
-import { gradeColor } from './grades'
+// Desktop OSM editor. All writes are local; publication is through an exported .osc.
+import type { Map as LibreMap } from 'maplibre-gl'
 import { BASE_URL, EDIT_PATH } from './config'
-import { fetchProblemSector, fetchSectorRoutes, type SectorRoute } from './sectorRoutes'
+import { createPathEditor, parsePath, stringifyPath, renderPhotoBlock } from './photos'
+import { gradeColor } from './grades'
+import { EditGraph, groupKind, isBoulder, isRoute, keyOf, type Element, type Key, type Position } from './editing/model'
+import { OsmReader } from './editing/osm'
+import { EditingMap, type Snap } from './editing/map'
 
-const sidebarEl = document.getElementById('sidebar')!
-const contentEl = document.getElementById('sidebar-content')!
-
-// ---------------------------------------------------------------------------
-//  Edit mode detection
-// ---------------------------------------------------------------------------
+const graph = new EditGraph()
+const reader = new OsmReader(graph)
+const sidebar = document.getElementById('sidebar')!
+const content = document.getElementById('sidebar-content')!
+const DRAFT_KEY = 'openbouldermap.editor.v1'
+let editingMap: EditingMap | undefined
+let selected: Key | undefined
+let busy = false
+let draftSaved = true
+let messageEl: HTMLElement | undefined
+let toolbar: HTMLElement | undefined
+let visibleLoad: Promise<void> | undefined
+const visibleLoaded = new Set<Key>()
+const visibleFailed = new Set<Key>()
+let reviewDialog: HTMLDialogElement | undefined
 
 export function isEditMode(): boolean {
-  const path = location.pathname.replace(/\/+$/, '') || '/'
-  const editPath = EDIT_PATH.replace(/\/+$/, '')
-  return path === editPath || new URLSearchParams(location.search).get('edit') === '1'
+  return location.pathname.replace(/\/+$/, '') === EDIT_PATH.replace(/\/+$/, '') || new URLSearchParams(location.search).get('edit') === '1'
 }
-
-// ---------------------------------------------------------------------------
-//  Floating pencil / exit button
-// ---------------------------------------------------------------------------
+function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = ''): HTMLElementTagNameMap[K] {
+  const el = document.createElement(tag); el.textContent = text; el.className = className; return el
+}
+function button(text: string, action: () => void, className = ''): HTMLButtonElement {
+  const b = node('button', text, `editor-action ${className}`); b.type = 'button'; b.addEventListener('click', action); return b
+}
+function message(text: string): void { if (messageEl) messageEl.textContent = text; syncToolbar() }
+function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error) }
+async function run(action: () => Promise<void> | void): Promise<boolean> {
+  if (busy) return false
+  busy = true; syncToolbar(); content.inert = true
+  try { await action(); return true }
+  catch (error) { message(errorMessage(error)); window.alert(errorMessage(error)); return false }
+  finally { busy = false; content.inert = false; syncToolbar(); editingMap?.render() }
+}
+function saveDraft(): void {
+  try {
+    if (graph.changes().length) localStorage.setItem(DRAFT_KEY, JSON.stringify({ graph: graph.serialize(), references: reader.serializeReferences() }))
+    else localStorage.removeItem(DRAFT_KEY)
+    draftSaved = true
+  } catch { draftSaved = false; message('Draft could not be saved in this browser. Export before leaving, or discard your changes.') }
+}
+graph.onChange = () => { editingMap?.render(); syncToolbar(); saveDraft() }
 
 export function initEditorButton(): void {
-  const button = document.getElementById('edit-toggle') as HTMLButtonElement | null
-  const oscButton = document.getElementById('osc-toggle') as HTMLButtonElement | null
-  if (!button) return
-
-  const sync = () => {
-    const editing = isEditMode()
-    button.textContent = editing ? '✕' : '✎'
-    button.classList.toggle('editing', editing)
-    button.title = editing
-      ? 'Leave the editor and go back to the map'
-      : 'Edit bouldering routes'
-    button.setAttribute('aria-label', button.title)
-
-    if (oscButton) {
-      oscButton.hidden = !editing
-      oscButton.title = 'Download an OSM changefile with all your local edits'
-    }
-    syncOscButton()
-  }
-  sync()
-
-  button.addEventListener('click', () => {
-    const hash = window.location.hash
-    if (isEditMode()) {
-      window.location.assign(`${BASE_URL}${hash}`)
-    } else {
-      window.location.assign(`${EDIT_PATH}${hash}`)
-    }
+  const toggle = document.getElementById('edit-toggle') as HTMLButtonElement
+  const exportButton = document.getElementById('osc-toggle') as HTMLButtonElement
+  const editing = isEditMode()
+  toggle.textContent = editing ? '✕' : '✎'
+  toggle.title = editing ? 'Leave edit mode (local draft is retained)' : 'Edit OpenStreetMap features'
+  toggle.setAttribute('aria-label', toggle.title)
+  toggle.classList.toggle('editing', editing)
+  exportButton.hidden = !editing
+  toggle.addEventListener('click', () => {
+    if (busy) return
+    if (editing && !draftSaved && graph.changes().length && !confirm('Your draft could not be saved. Leave and lose local work?')) return
+    location.assign(`${editing ? BASE_URL : EDIT_PATH}${location.hash}`)
   })
-
-  oscButton?.addEventListener('click', () => {
-    downloadOsc()
-  })
-}
-
-// ---------------------------------------------------------------------------
-//  Types
-// ---------------------------------------------------------------------------
-
-interface OsmNode {
-  type: 'node'
-  id: number
-  lat: number
-  lon: number
-  version?: number
-  tags?: Record<string, string>
-}
-
-type OsmElementType = 'node' | 'way' | 'relation'
-
-interface OsmElementMember {
-  type: OsmElementType
-  ref: number
-  role?: string
-}
-
-interface OsmBoulderElement {
-  type: OsmElementType
-  id: number
-  version?: number
-  lat?: number
-  lon?: number
-  nodes?: number[]
-  members?: OsmElementMember[]
-  tags?: Record<string, string>
-}
-
-interface BoulderEdit {
-  id: number
-  osmType: OsmElementType
-  lat: number
-  lon: number
-  version?: number
-  element?: OsmBoulderElement
-  originalTags: Record<string, string>
-  name: string
-  dirty: boolean
-  liveLoaded: boolean
-  loading: boolean
-  liveError?: string
-}
-
-interface RouteEdit {
-  id: number
-  osmType: string
-  lat: number
-  lon: number
-  version?: number
-
-  // Authoritative current tags fetched from the live OSM API.
-  originalTags: Record<string, string>
-  originalImage: string
-
-  liveLoaded: boolean
-  loading: boolean
-  liveError?: string
-
-  // Current editor values.
-  name: string
-  grade: string
-  description: string
-  image: string
-  path: string
-  sit: boolean
-
-  // Keys whose value the user has explicitly changed while editing.
-  dirty: Set<string>
-
-  // Routes in the same sector (the app's current block grouping), used as
-  // reference lines while drawing on a shared image.
-  blockRoutes?: SectorRoute[]
-  blockRoutesLoading?: Promise<SectorRoute[]>
-}
-
-const edits = new Map<number, RouteEdit>()
-const boulderEdits = new Map<string, BoulderEdit>()
-const nodeCache = new Map<number, Promise<OsmNode>>()
-const boulderElementCache = new Map<string, Promise<OsmBoulderElement>>()
-let currentEditId: number | undefined
-let currentBoulderEditKey: string | undefined
-let previewTimer: number | undefined
-
-/**
- * Overlay unsaved editor values onto route properties used elsewhere in the
- * app. This keeps boulder overview lines in sync with the path preview while
- * an edit is still only held in memory.
- */
-export function withLocalRouteEdits(properties: Record<string, any>): Record<string, any> {
-  const edit = edits.get(Number(properties.osm_id))
-  if (!edit || edit.dirty.size === 0) return properties
-
-  const result = { ...properties }
-  const setEditedValue = (dirtyKey: string, propertyKey: string, value: string) => {
-    if (edit.dirty.has(dirtyKey)) result[propertyKey] = value
-  }
-
-  setEditedValue('name', 'name', edit.name)
-  setEditedValue('climbing:grade:font', 'climbing:grade:font', normalizeGrade(edit.grade))
-  setEditedValue('description', 'description', edit.description)
-  setEditedValue('wikimedia_commons:path', 'wikimedia_commons:path', edit.path)
-
-  if (edit.dirty.has('wikimedia_commons')) {
-    const image = normalizeImage(edit.image)
-    // Set both supported keys so an old fallback `image` value cannot win when
-    // the Wikimedia image is changed or cleared locally.
-    result.wikimedia_commons = image
-    result.image = image
-  }
-  if (edit.dirty.has('climbing:start')) {
-    result['climbing:start'] = edit.sit ? 'sit' : ''
-  }
-
-  return result
-}
-
-// ---------------------------------------------------------------------------
-//  Helpers
-// ---------------------------------------------------------------------------
-
-function el(tag: string, cls: string, html = ''): HTMLElement {
-  const node = document.createElement(tag)
-  if (cls) node.className = cls
-  node.innerHTML = html
-  return node
-}
-
-function escapeXml(value: string): string {
-  return value.replace(/[&<>"']/g, char => {
-    switch (char) {
-      case '&': return '&amp;'
-      case '<': return '&lt;'
-      case '>': return '&gt;'
-      case '"': return '&quot;'
-      default: return '&apos;'
-    }
-  })
-}
-
-function normalizeGrade(value: string): string {
-  return value.trim().toUpperCase()
-}
-
-/**
- * Accept either a `File:…` tag value or a full Wikimedia Commons URL and
- * normalize it to the `File:…` form stored in OSM.
- */
-function normalizeImage(value: string): string {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  if (/^File:/i.test(trimmed)) return `File:${trimmed.replace(/^File:/i, '').trim()}`
-
-  const urlMatch = trimmed.match(/\/wiki\/(File:[^?#]+)/i)
-  if (urlMatch) {
-    try {
-      const filename = decodeURIComponent(urlMatch[1].slice(5).replace(/_/g, ' '))
-      return `File:${filename}`
-    } catch {
-      return trimmed
-    }
-  }
-  return trimmed
-}
-
-function osmPermalink(lat: number, lon: number, zoom = 18): string {
-  return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=${zoom}/${lat}/${lon}`
-}
-
-function sameImage(a: string, b: string): boolean {
-  const canonical = (value: string) => normalizeImage(value)
-    .replace(/_/g, ' ')
-    .replace(/\s+/g, ' ')
-    .toLocaleLowerCase()
-  return canonical(a) === canonical(b)
-}
-
-async function loadBlockRoutes(edit: RouteEdit): Promise<SectorRoute[]> {
-  if (edit.blockRoutes) return edit.blockRoutes
-  if (edit.blockRoutesLoading) return edit.blockRoutesLoading
-
-  edit.blockRoutesLoading = (async () => {
-    const sector = await fetchProblemSector(edit.osmType, edit.id)
-    const routes = sector ? await fetchSectorRoutes(sector.id) : []
-    edit.blockRoutes = routes
-    return routes
-  })()
-
-  try {
-    return await edit.blockRoutesLoading
-  } finally {
-    edit.blockRoutesLoading = undefined
-  }
-}
-
-function referencePaths(edit: RouteEdit, routes: SectorRoute[]): PathPoint[][] {
-  return routes.flatMap(route => {
-    const id = Number(route.properties.osm_id)
-    if (id === edit.id) return []
-
-    // Prefer values already changed during this editing session over the live
-    // relation snapshot so switching between routes gives immediate feedback.
-    const localEdit = edits.get(id)
-    const image = localEdit?.image ?? String(route.properties.wikimedia_commons || route.properties.image || '')
-    if (!sameImage(image, edit.image)) return []
-    const path = localEdit?.path ?? String(route.properties['wikimedia_commons:path'] || '')
-    const points = parsePath(path)
-    return points.length > 1 ? [points] : []
-  })
-}
-
-// ---------------------------------------------------------------------------
-//  Live OSM node data
-// ---------------------------------------------------------------------------
-
-function fetchNode(id: number): Promise<OsmNode> {
-  const cached = nodeCache.get(id)
-  if (cached) return cached
-
-  const request = fetch(`https://api.openstreetmap.org/api/0.6/node/${id}.json`)
-    .then(async response => {
-      if (!response.ok) throw new Error(`OpenStreetMap returned ${response.status}`)
-      return response.json() as Promise<{ elements: OsmNode[] }>
-    })
-    .then(({ elements }) => {
-      const node = elements.find(element => element.type === 'node' && element.id === id)
-      if (!node) throw new Error('Node not found in OSM API response')
-      return node
-    })
-
-  nodeCache.set(id, request)
-  request.catch(() => nodeCache.delete(id))
-  return request
-}
-
-async function ensureLiveData(edit: RouteEdit): Promise<void> {
-  if (edit.liveLoaded || edit.loading) return
-  edit.loading = true
-  updateStatus(edit)
-
-  try {
-    const node = await fetchNode(edit.id)
-    edit.version = node.version
-    edit.lat = node.lat
-    edit.lon = node.lon
-    edit.originalTags = { ...(node.tags ?? {}) }
-    edit.originalImage = edit.originalTags.wikimedia_commons || edit.originalTags.image || ''
-
-    if (!edit.dirty.has('name')) edit.name = edit.originalTags.name ?? ''
-    if (!edit.dirty.has('climbing:grade:font')) edit.grade = edit.originalTags['climbing:grade:font'] ?? ''
-    if (!edit.dirty.has('description')) edit.description = edit.originalTags.description ?? ''
-    if (!edit.dirty.has('wikimedia_commons')) edit.image = edit.originalImage
-    if (!edit.dirty.has('wikimedia_commons:path')) edit.path = edit.originalTags['wikimedia_commons:path'] ?? ''
-    if (!edit.dirty.has('climbing:start')) edit.sit = edit.originalTags['climbing:start'] === 'sit'
-
-    edit.liveLoaded = true
-    edit.liveError = undefined
-    if (currentEditId === edit.id) syncFormFromEdit(edit)
-  } catch (error) {
-    edit.liveError = error instanceof Error ? error.message : String(error)
-    if (currentEditId === edit.id) updateStatus(edit)
-  } finally {
-    edit.loading = false
-    if (currentEditId === edit.id) updateStatus(edit)
-    syncOscButton()
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  Boulder name editing
-// ---------------------------------------------------------------------------
-
-function boulderEditKey(osmType: string, id: number): string {
-  return `${osmType}/${id}`
-}
-
-function fetchBoulderElement(osmType: OsmElementType, id: number): Promise<OsmBoulderElement> {
-  const key = boulderEditKey(osmType, id)
-  const cached = boulderElementCache.get(key)
-  if (cached) return cached
-
-  const request = fetch(`https://api.openstreetmap.org/api/0.6/${key}.json`)
-    .then(async response => {
-      if (!response.ok) throw new Error(`OpenStreetMap returned ${response.status}`)
-      return response.json() as Promise<{ elements: OsmBoulderElement[] }>
-    })
-    .then(({ elements }) => {
-      const element = elements.find(candidate => candidate.type === osmType && candidate.id === id)
-      if (!element) throw new Error('Boulder not found in OSM API response')
-      return element
-    })
-
-  boulderElementCache.set(key, request)
-  request.catch(() => boulderElementCache.delete(key))
-  return request
-}
-
-async function ensureBoulderLiveData(edit: BoulderEdit): Promise<void> {
-  if (edit.liveLoaded || edit.loading) return
-  edit.loading = true
-  updateBoulderStatus(edit)
-
-  try {
-    const element = await fetchBoulderElement(edit.osmType, edit.id)
-    edit.element = element
-    edit.version = element.version
-    edit.originalTags = { ...(element.tags ?? {}) }
-    if (!edit.dirty) edit.name = edit.originalTags.name ?? ''
-    edit.liveLoaded = true
-    edit.liveError = undefined
-    if (currentBoulderEditKey === boulderEditKey(edit.osmType, edit.id) && !sidebarEl.classList.contains('hidden')) {
-      renderBoulderEditor(edit)
-    }
-  } catch (error) {
-    edit.liveError = error instanceof Error ? error.message : String(error)
-  } finally {
-    edit.loading = false
-    updateBoulderStatus(edit)
-    syncOscButton()
-  }
-}
-
-export function showBoulderEditor(props: Record<string, any>, lon: number, lat: number): void {
-  const osmType = String(props.osm_type ?? '') as OsmElementType
-  const osmId = Number(props.osm_id)
-  if (!Number.isFinite(osmId) || !['node', 'way', 'relation'].includes(osmType)) {
-    renderNotice('This boulder has no editable OSM element.')
-    return
-  }
-
-  const key = boulderEditKey(osmType, osmId)
-  currentBoulderEditKey = key
-  currentEditId = undefined
-  let edit = boulderEdits.get(key)
-  if (!edit) {
-    const name = props.name === undefined || props.name === null ? '' : String(props.name)
-    edit = {
-      id: osmId,
-      osmType,
-      lat,
-      lon,
-      originalTags: name ? { name } : {},
-      name,
-      dirty: false,
-      liveLoaded: false,
-      loading: false
-    }
-    boulderEdits.set(key, edit)
-  }
-
-  renderBoulderEditor(edit)
-  void ensureBoulderLiveData(edit)
-}
-
-function updateBoulderStatus(edit: BoulderEdit): void {
-  if (currentBoulderEditKey !== boulderEditKey(edit.osmType, edit.id)) return
-  const status = document.getElementById('boulder-editor-status')
-  if (!status) return
-  if (edit.liveError) {
-    status.textContent = `Could not load OSM ${edit.osmType} data: ${edit.liveError}`
-  } else if (edit.liveLoaded) {
-    status.textContent = `OSM ${edit.osmType} #${edit.id} · version ${edit.version ?? '?'} · ready to export`
-  } else {
-    status.textContent = `Loading current OSM data for ${edit.osmType} #${edit.id}…`
-  }
-}
-
-function renderBoulderEditor(edit: BoulderEdit): void {
-  contentEl.innerHTML = ''
-  contentEl.appendChild(el('h1', 'route-name', 'Edit boulder'))
-
-  const status = el('div', 'muted editor-status', '')
-  status.id = 'boulder-editor-status'
-  contentEl.appendChild(status)
-
-  const form = document.createElement('form')
-  form.className = 'editor-form'
-  form.addEventListener('submit', event => event.preventDefault())
-
-  const nameInput = document.createElement('input')
-  nameInput.type = 'text'
-  nameInput.className = 'editor-input'
-  nameInput.value = edit.name
-  nameInput.placeholder = 'Boulder name'
-  nameInput.addEventListener('input', () => {
-    edit.name = nameInput.value
-    edit.dirty = true
-    syncOscButton()
-  })
-  form.appendChild(field('Name', nameInput))
-  form.appendChild(el('div', 'muted', 'Changes are kept locally until you download and upload the .osc changefile.'))
-  contentEl.appendChild(form)
-  contentEl.appendChild(el('div', 'links',
-    `<a href="${osmPermalink(edit.lat, edit.lon)}" target="_blank" rel="noopener">view on OSM</a>`))
-
-  sidebarEl.classList.remove('hidden')
-  updateBoulderStatus(edit)
-}
-
-// ---------------------------------------------------------------------------
-//  Route editor form
-// ---------------------------------------------------------------------------
-
-export function showRouteEditor(props: Record<string, any>, lon: number, lat: number): void {
-  currentBoulderEditKey = undefined
-  const osmType = String(props.osm_type ?? 'node')
-  const osmId = Number(props.osm_id)
-
-  if (!Number.isFinite(osmId)) {
-    renderNotice('This route has no OSM id, so it cannot be edited.')
-    return
-  }
-
-  if (osmType !== 'node') {
-    renderNotice(`This route is an OSM ${osmType}, but the v0 editor only supports nodes.`)
-    return
-  }
-
-  const edit = getOrCreateEdit(osmId, osmType, props, lon, lat)
-  currentEditId = edit.id
-  renderEditForm(edit)
-  void ensureLiveData(edit)
-}
-
-function getOrCreateEdit(
-  id: number,
-  osmType: string,
-  props: Record<string, any>,
-  lon: number,
-  lat: number,
-): RouteEdit {
-  const existing = edits.get(id)
-  if (existing) return existing
-
-  const originalTags: Record<string, string> = {}
-  for (const key of ['name', 'climbing:grade:font', 'climbing:start', 'description', 'wikimedia_commons', 'wikimedia_commons:path', 'image']) {
-    const value = props[key]
-    if (value !== undefined && value !== null) originalTags[key] = String(value)
-  }
-  const originalImage = originalTags.wikimedia_commons || originalTags.image || ''
-
-  const edit: RouteEdit = {
-    id,
-    osmType,
-    lat,
-    lon,
-    originalTags,
-    originalImage,
-    liveLoaded: false,
-    loading: false,
-    dirty: new Set<string>(),
-    name: originalTags.name ?? '',
-    grade: originalTags['climbing:grade:font'] ?? '',
-    description: originalTags.description ?? '',
-    image: originalImage,
-    path: originalTags['wikimedia_commons:path'] ?? '',
-    sit: originalTags['climbing:start'] === 'sit'
-  }
-
-  edits.set(id, edit)
-  return edit
-}
-
-function renderNotice(message: string): void {
-  contentEl.innerHTML = ''
-  contentEl.appendChild(el('h1', 'route-name', 'Edit route'))
-  contentEl.appendChild(el('div', 'muted', message))
-  sidebarEl.classList.remove('hidden')
-}
-
-function field(labelText: string, control: HTMLElement): HTMLElement {
-  const wrap = document.createElement('div')
-  wrap.className = 'editor-field'
-
-  const label = document.createElement('label')
-  label.className = 'editor-field-label'
-  label.textContent = labelText
-
-  wrap.appendChild(label)
-  wrap.appendChild(control)
-  return wrap
-}
-
-function updateStatus(edit: RouteEdit): void {
-  const status = document.getElementById('editor-status')
-  if (!status) return
-  if (edit.liveError) {
-    status.textContent = `Could not load OSM node data: ${edit.liveError}`
-  } else if (edit.liveLoaded) {
-    status.textContent = `OSM node #${edit.id} · version ${edit.version ?? '?'} · ready to export`
-  } else {
-    status.textContent = `Loading current OSM data for node #${edit.id}…`
-  }
-}
-
-function syncFormFromEdit(edit: RouteEdit): void {
-  const name = document.getElementById('edit-name') as HTMLInputElement | null
-  const grade = document.getElementById('edit-grade') as HTMLInputElement | null
-  const sit = document.getElementById('edit-sit') as HTMLInputElement | null
-  const description = document.getElementById('edit-description') as HTMLTextAreaElement | null
-  const image = document.getElementById('edit-image') as HTMLInputElement | null
-
-  if (name && !edit.dirty.has('name')) name.value = edit.name
-  if (grade && !edit.dirty.has('climbing:grade:font')) grade.value = edit.grade
-  if (description && !edit.dirty.has('description')) description.value = edit.description
-  if (image && !edit.dirty.has('wikimedia_commons')) image.value = edit.image
-  if (sit && !edit.dirty.has('climbing:start')) sit.checked = edit.sit
-
-  renderEditorPhotoArea(edit)
-  updateStatus(edit)
-}
-
-function renderEditForm(edit: RouteEdit): void {
-  contentEl.innerHTML = ''
-
-  contentEl.appendChild(el('h1', 'route-name', 'Edit route'))
-
-  const status = el('div', 'muted editor-status', '')
-  status.id = 'editor-status'
-  contentEl.appendChild(status)
-
-  const form = document.createElement('form')
-  form.className = 'editor-form'
-  form.addEventListener('submit', event => {
-    event.preventDefault()
-  })
-
-  // Attach the form before filling it so `renderEditorPhotoArea` can find the
-  // `#editor-photo-area` element via document.getElementById.
-  contentEl.appendChild(form)
-
-  // Name
-  const nameInput = document.createElement('input')
-  nameInput.type = 'text'
-  nameInput.id = 'edit-name'
-  nameInput.className = 'editor-input'
-  nameInput.value = edit.name
-  nameInput.placeholder = 'Route name'
-  nameInput.addEventListener('input', () => {
-    edit.name = nameInput.value
-    edit.dirty.add('name')
-    syncOscButton()
-  })
-  form.appendChild(field('Name', nameInput))
-
-  // Grade
-  const gradeInput = document.createElement('input')
-  gradeInput.type = 'text'
-  gradeInput.id = 'edit-grade'
-  gradeInput.className = 'editor-input'
-  gradeInput.value = edit.grade
-  gradeInput.placeholder = 'e.g. 7C+'
-  gradeInput.addEventListener('input', () => {
-    edit.grade = gradeInput.value
-    edit.dirty.add('climbing:grade:font')
-    syncOscButton()
-  })
-  form.appendChild(field('Grade (Font)', gradeInput))
-
-  // Sit start
-  const sitCheck = document.createElement('input')
-  sitCheck.type = 'checkbox'
-  sitCheck.id = 'edit-sit'
-  sitCheck.className = 'editor-check'
-  sitCheck.checked = edit.sit
-  sitCheck.addEventListener('change', () => {
-    edit.sit = sitCheck.checked
-    edit.dirty.add('climbing:start')
-    syncOscButton()
-  })
-
-  const sitLabel = document.createElement('label')
-  sitLabel.className = 'editor-check-label'
-  sitLabel.appendChild(sitCheck)
-  sitLabel.appendChild(document.createTextNode(' Sit start'))
-  form.appendChild(field('Start', sitLabel))
-
-  // Description
-  const descInput = document.createElement('textarea')
-  descInput.id = 'edit-description'
-  descInput.className = 'editor-textarea'
-  descInput.rows = 4
-  descInput.value = edit.description
-  descInput.placeholder = 'Description'
-  descInput.addEventListener('input', () => {
-    edit.description = descInput.value
-    edit.dirty.add('description')
-    syncOscButton()
-  })
-  form.appendChild(field('Description', descInput))
-
-  // Wikimedia image
-  const imageInput = document.createElement('input')
-  imageInput.type = 'text'
-  imageInput.id = 'edit-image'
-  imageInput.className = 'editor-input'
-  imageInput.value = edit.image
-  imageInput.placeholder = 'File:Trieste_Gottardo.jpg'
-  imageInput.addEventListener('input', () => {
-    edit.image = imageInput.value
-    edit.dirty.add('wikimedia_commons')
-    syncOscButton()
-    if (previewTimer) window.clearTimeout(previewTimer)
-    previewTimer = window.setTimeout(() => {
-      if (currentEditId !== edit.id) return
-      renderEditorPhotoArea(edit)
-    }, 400)
-  })
-  form.appendChild(field('Wikimedia image', imageInput))
-
-  const photoArea = el('div', 'editor-photo-area', '')
-  photoArea.id = 'editor-photo-area'
-  form.appendChild(photoArea)
-  renderEditorPhotoArea(edit)
-
-  const hint = el('div', 'muted', 'Changes are kept locally. Use the ⬇ Download .osc button in the top-left corner to export all your edits, then open the file in JOSM to upload.')
-  form.appendChild(hint)
-
-  contentEl.appendChild(el('div', 'links',
-    `<a href="${osmPermalink(edit.lat, edit.lon)}" target="_blank" rel="noopener">view on OSM</a>`))
-
-  sidebarEl.classList.remove('hidden')
-  updateStatus(edit)
-}
-
-// ---------------------------------------------------------------------------
-//  Image + route path editing
-// ---------------------------------------------------------------------------
-
-function renderEditorPhotoArea(edit: RouteEdit): void {
-  const container = document.getElementById('editor-photo-area')
-  if (!container) return
-  container.innerHTML = ''
-
-  const file = normalizeImage(edit.image)
-  if (!file.startsWith('File:')) {
-    container.appendChild(el('div', 'muted', 'Set a Wikimedia image above to add a route path.'))
-    return
-  }
-
-  const points = parsePath(edit.path)
-  const color = edit.grade ? gradeColor(edit.grade) : '#9e9e9e'
-  container.appendChild(renderPhotoBlock(file, points.length > 0 ? [{ points, color }] : []))
-  container.appendChild(buildEditorPathControls(file, edit))
-}
-
-function buildEditorPathControls(imageFilename: string, edit: RouteEdit): HTMLElement {
-  const existingPoints = parsePath(edit.path)
-  const wrap = document.createElement('div')
-  wrap.className = 'path-controls'
-
-  const editBtn = document.createElement('button')
-  editBtn.className = 'path-edit-btn'
-  editBtn.textContent = existingPoints.length > 0 ? '✎ Edit path' : '+ Add path'
-  editBtn.addEventListener('click', async () => {
-    editBtn.disabled = true
-    const originalLabel = editBtn.textContent
-    editBtn.textContent = 'Loading routes…'
-
-    let otherPaths: PathPoint[][] = []
-    try {
-      otherPaths = referencePaths(edit, await loadBlockRoutes(edit))
-    } catch (error) {
-      console.warn('Could not load other routes on this block', error)
-    } finally {
-      editBtn.disabled = false
-      editBtn.textContent = originalLabel
-    }
-
-    createPathEditor(imageFilename, existingPoints, {
-      onDone: (newPoints) => {
-        edit.path = stringifyPath(newPoints)
-        edit.dirty.add('wikimedia_commons:path')
-        renderEditorPhotoArea(edit)
-        syncOscButton()
-      },
-      onCancel: () => {}
-    }, otherPaths)
-  })
-  wrap.appendChild(editBtn)
-
-  if (existingPoints.length > 0) {
-    const str = stringifyPath(existingPoints)
-    const field = document.createElement('div')
-    field.className = 'path-result'
-
-    const input = document.createElement('input')
-    input.type = 'text'
-    input.className = 'path-result-input'
-    input.value = str
-    input.readOnly = true
-    input.title = 'This value will be written to the wikimedia_commons:path tag'
-    field.appendChild(input)
-
-    const copyBtn = document.createElement('button')
-    copyBtn.className = 'path-copy-btn'
-    copyBtn.textContent = 'Copy'
-    copyBtn.addEventListener('click', () => {
-      const fullTag = `wikimedia_commons:path=${str}`
-      navigator.clipboard.writeText(fullTag).then(() => {
-        copyBtn.textContent = 'Copied!'
-        setTimeout(() => { copyBtn.textContent = 'Copy' }, 1500)
+  exportButton.addEventListener('click', showReview)
+  if (!editing) return
+  toolbar = node('div', '', 'geometry-toolbar')
+  toolbar.setAttribute('aria-label', 'Editing tools')
+  const tools: [string, string, () => void][] = [
+    ['route', '+ Route', () => void run(async () => { await loadVisible(); editingMap?.setTool('route') })],
+    ['boulder', '+ Boulder', () => editingMap?.setTool('boulder')],
+    ['finish', 'Finish outline', () => editingMap?.finish()],
+    ['cancel', 'Cancel action', () => editingMap?.cancel()],
+    ['undo', 'Undo', () => { editingMap?.cancel(); graph.undo(); renderSelected() }],
+    ['redo', 'Redo', () => { editingMap?.cancel(); graph.redo(); renderSelected() }],
+    ['find', 'Find sector / area', () => findGroup()],
+    ['review', 'Review changes', showReview],
+    ['discard', 'Discard local changes', () => {
+      if (busy || !confirm('Discard ALL local edits, including new features and pending deletions? This cannot be undone.')) return
+      void run(async () => {
+        await visibleLoad?.catch(() => {})
+        editingMap?.cancel(); graph.discard(); graph.base = {}; reader.reset(); visibleLoaded.clear(); visibleFailed.clear(); selected = undefined; editingMap?.select(undefined)
+        content.replaceChildren(node('p', 'All local changes discarded.')); message('Local edits discarded.'); await loadVisible()
       })
+    }]
+  ]
+  for (const [id, title, action] of tools) { const b = button(title, () => { if (!busy) action() }); b.dataset.tool = id; toolbar.append(b) }
+  messageEl = node('div', 'Local edits only · Select a feature, or create a route or boulder.', 'editing-message')
+  messageEl.setAttribute('role', 'status'); messageEl.setAttribute('aria-live', 'polite')
+  document.getElementById('app')!.append(toolbar, messageEl)
+  try {
+    const saved = localStorage.getItem(DRAFT_KEY)
+    if (saved) {
+      if (confirm('Restore your unpublished OpenBoulderMap editing draft? Cancel discards the saved draft.')) {
+        const draft = JSON.parse(saved)
+        reader.restoreReferences(draft.references)
+        graph.restore(draft.graph)
+        message('Draft restored. Original OSM versions will be checked before export. Nothing has been published.')
+      } else localStorage.removeItem(DRAFT_KEY)
+    }
+  } catch (error) { draftSaved = false; message(`Could not restore draft: ${errorMessage(error)}. Use Discard local changes to clear it.`) }
+  window.addEventListener('beforeunload', event => {
+    if ((!draftSaved && graph.changes().length) || busy || editingMap?.drawing.length || document.querySelector('dialog[open] details[open], .editor-backdrop')) { event.preventDefault(); event.returnValue = '' }
+  })
+  window.addEventListener('keydown', event => {
+    if (busy || document.querySelector('dialog[open], .editor-backdrop') || (event.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return
+    if (event.key === 'Escape') editingMap?.cancel()
+    if (event.key === 'Enter' && editingMap?.tool === 'boulder') editingMap.finish()
+    if (event.key === 'Backspace' && editingMap?.tool === 'boulder') { event.preventDefault(); editingMap.drawing.pop(); editingMap.render() }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault(); editingMap?.cancel(); event.shiftKey ? graph.redo() : graph.undo(); renderSelected()
+    }
+  })
+  syncToolbar()
+}
+function syncToolbar(): void {
+  const count = graph.changes().length
+  document.getElementById('osc-count')!.textContent = String(count)
+  for (const b of toolbar?.querySelectorAll('button') ?? []) {
+    b.disabled = busy || b.dataset.tool === 'undo' && !graph.undoLabel || b.dataset.tool === 'redo' && !graph.redoLabel || b.dataset.tool === 'finish' && editingMap?.tool !== 'boulder'
+    if (b.dataset.tool === 'route' || b.dataset.tool === 'boulder') b.setAttribute('aria-pressed', String(b.dataset.tool === editingMap?.tool))
+    if (b.dataset.tool === 'undo') b.title = graph.undoLabel ?? 'Nothing to undo'
+    if (b.dataset.tool === 'redo') b.title = graph.redoLabel ?? 'Nothing to redo'
+  }
+  ;(document.getElementById('osc-toggle') as HTMLButtonElement).disabled = busy
+  toolbar?.classList.toggle('is-busy', busy)
+}
+export function initEditorMap(map: LibreMap): void {
+  if (!isEditMode()) return
+  editingMap = new EditingMap(map, graph, {
+    canInteract: () => !busy && !document.querySelector('dialog[open], .editor-backdrop'),
+    message,
+    loadVisible: () => { void loadVisible().catch(error => message(`Could not load snapping geometry: ${errorMessage(error)}. Select a boulder to retry.`)) },
+    select: key => void select(key),
+    vertex: (way, vertex) => renderVertex(way, vertex),
+    createRoute: (p, snap) => void run(async () => {
+      await prepareSnap(snap)
+      let key: Key | undefined
+      graph.transaction('Create route', () => { key = keyOf(graph.addRoute(p)); if (snap) graph.attach(key, snap.way, snap.segment, snap.position, snap.vertex) })
+      editingMap!.setTool('select'); selectLocal(key!)
+    }),
+    createBoulder: points => void run(() => {
+      if (points.length < 3) throw new Error('Place at least three perimeter corners before finishing')
+      let key: Key | undefined
+      graph.transaction('Create boulder', () => { key = keyOf(graph.addBoulder(points)) })
+      editingMap!.setTool('select'); selectLocal(key!)
+    }),
+    moveNode: (key, p, snap) => void run(async () => {
+      await reader.geometry([key]); await prepareSnap(snap)
+      graph.transaction(snap ? 'Attach route to boulder' : 'Move shared vertex / route', () => {
+        if (snap) graph.attach(key, snap.way, snap.segment, snap.position, snap.vertex)
+        else graph.moveNode(key, p)
+      }); renderSelected()
+    }),
+    moveBoulder: (key, dx, dy) => void run(async () => {
+      const nodes = [...new Set(graph.rings(key).flatMap(w => w.nodes!))].map(id => `node/${id}` as Key)
+      await reader.geometry(nodes)
+      graph.transaction('Move entire boulder and attached routes', () => graph.moveBoulder(key, dx, dy)); editingMap!.setTool('select'); renderSelected()
+    }),
+    insert: (way, segment, p) => void run(() => {
+      let id = 0
+      graph.transaction('Insert perimeter vertex', () => { id = graph.insertVertex(way, segment, p) })
+      editingMap!.vertexSelection = { way, node: `node/${id}` }; renderVertex(way, `node/${id}`)
     })
-    field.appendChild(copyBtn)
-
-    wrap.appendChild(field)
-
-    const hint = document.createElement('div')
-    hint.className = 'path-hint'
-    hint.innerHTML = 'Included as <code>wikimedia_commons:path</code> in the downloaded .osc changefile.'
-    wrap.appendChild(hint)
+  })
+}
+async function loadVisible(): Promise<void> {
+  if (!editingMap || !editingMap.map.getLayer('edit-vertices')) return
+  if (visibleLoad) return visibleLoad
+  const map = editingMap.map
+  // Only load physical boulders currently visible. Relations are loaded in full,
+  // including ring nodes, before being offered as snap targets.
+  const keys = [...new Set(map.queryRenderedFeatures({ layers: ['boulder', 'boulder-label'] }).map(f => `${f.properties.osm_type}/${f.properties.osm_id}` as Key))].filter(k => /^(way|relation)\/\d+$/.test(k) && !visibleLoaded.has(k) && !visibleFailed.has(k))
+  if (!keys.length) return
+  visibleLoad = (async () => {
+    const failures: string[] = []
+    for (const key of keys) {
+      try { await reader.select(key); visibleLoaded.add(key) }
+      catch (error) { visibleFailed.add(key); failures.push(`${key}: ${errorMessage(error)}`) }
+    }
+    editingMap?.render()
+    if (failures.length) throw new Error(failures.join('\n'))
+  })()
+  try { await visibleLoad } finally { visibleLoad = undefined }
+}
+async function prepareSnap(snap?: Snap): Promise<void> {
+  if (!snap) return
+  await reader.load(snap.way, true)
+  if (snap.vertex !== undefined) await reader.references(`node/${snap.vertex}`)
+}
+async function select(key: Key): Promise<void> {
+  await run(async () => {
+    message(`Loading current OSM data for ${key}…`)
+    await reader.select(key)
+    visibleFailed.delete(key)
+    selectLocal(key)
+    const e = graph.require(key), map = editingMap?.map
+    let position: Position | undefined
+    if (e.type === 'node') position = [e.lon!, e.lat!]
+    else if (isBoulder(e)) {
+      try {
+        const points = graph.rings(key).flatMap(w => w.nodes!.slice(0, -1).map(id => graph.position(id)))
+        position = [points.reduce((sum, p) => sum + p[0], 0) / points.length, points.reduce((sum, p) => sum + p[1], 0) / points.length]
+      } catch { /* Unsupported geometry remains available in the details panel. */ }
+    }
+    if (map && position && (!map.getBounds().contains(position) || map.getZoom() < 17)) map.flyTo({ center: position, zoom: 19 })
+  })
+}
+function selectLocal(key: Key): void {
+  selected = key; editingMap?.setTool('select'); editingMap?.select(key); renderSelected()
+  message(`${key} · Local changes only. Drag selected vertices; Alt disables snapping. Detach routes before independent movement.`)
+}
+export function showRouteEditor(props: Record<string, any>, _lon: number, _lat: number): void {
+  void select(`${props.osm_type ?? 'node'}/${Number(props.osm_id)}` as Key)
+}
+export function showBoulderEditor(props: Record<string, any>, _lon: number, _lat: number): void {
+  void select(`${props.osm_type ?? 'way'}/${Number(props.osm_id)}` as Key)
+}
+export function withLocalRouteEdits(props: Record<string, any>): Record<string, any> {
+  const e = graph.get(`node/${Number(props.osm_id)}`)
+  return e ? { ...props, ...e.tags } : props
+}
+function beginPanel(title: string): void { content.replaceChildren(node('h1', title, 'route-name')); sidebar.classList.remove('hidden') }
+function textField(parent: HTMLElement, label: string, value: string, onChange: (value: string) => void, multiline = false): HTMLInputElement | HTMLTextAreaElement {
+  const wrap = node('label', '', 'editor-field'), title = node('span', label, 'editor-field-label')
+  const input = multiline ? node('textarea') : node('input')
+  input.className = multiline ? 'editor-textarea' : 'editor-input'; input.value = value
+  if (input instanceof HTMLTextAreaElement) input.rows = 3
+  input.addEventListener('input', () => {
+    if (busy) return
+    try { onChange(input.value) } catch (error) { message(errorMessage(error)); alert(errorMessage(error)); input.value = value }
+  })
+  wrap.append(title, input); parent.append(wrap); return input
+}
+function renderSelected(): void {
+  if (!selected || !graph.get(selected)) {
+    selected = undefined; editingMap?.select(undefined); beginPanel('Edit mode'); content.append(node('p', 'Select a feature, create one, or review your local changes.')); return
   }
-
-  return wrap
-}
-
-// ---------------------------------------------------------------------------
-//  OsmChange export
-// ---------------------------------------------------------------------------
-
-function buildFinalTags(edit: RouteEdit): Record<string, string> {
-  // Start from the complete set of live OSM tags. An OsmChange `<modify>`
-  // replaces the whole element, so every unchanged tag must be present too.
-  const tags: Record<string, string> = { ...edit.originalTags }
-
-  const setTag = (key: string, value: string) => {
-    if (value === '') delete tags[key]
-    else tags[key] = value
+  const key = selected, e = graph.require(key), kind = groupKind(e)
+  const title = isRoute(e) ? 'route' : isBoulder(e) ? 'boulder' : kind
+  if (!title) { beginPanel('Unsupported feature'); content.append(node('p', 'This object is not a supported climbing feature. Use JOSM to edit it.')); return }
+  beginPanel(`Edit ${title}`)
+  content.append(node('p', `${key}${e.version ? ` · OSM version ${e.version}` : ' · new local feature'} · not published`, 'muted'))
+  const form = node('div', '', 'editor-form'); content.append(form)
+  const editTag = (tag: string, v: string) => graph.transaction(`Edit ${title} ${tag}`, () => graph.setTags(key, { [tag]: v }), `${key}:${tag}`)
+  textField(form, 'Name', e.tags.name ?? '', v => editTag('name', v))
+  textField(form, 'Description', e.tags.description ?? '', v => editTag('description', v), true)
+  if (isRoute(e)) {
+    textField(form, 'Grade (Font)', e.tags['climbing:grade:font'] ?? '', v => editTag('climbing:grade:font', v.toUpperCase()))
+    const startLabel = node('label', 'Start type', 'editor-field'), start = node('select', '', 'editor-input')
+    const values = [...new Set(['', 'sit', 'stand', 'crouch', e.tags['climbing:start'] ?? ''])]
+    for (const v of values) { const o = node('option', v || 'Unknown'); o.value = v; start.append(o) }
+    start.value = e.tags['climbing:start'] ?? ''; start.addEventListener('change', () => {
+      try { editTag('climbing:start', start.value) } catch (error) { alert(errorMessage(error)); start.value = graph.require(key).tags['climbing:start'] ?? '' }
+    }); startLabel.append(start); form.append(startLabel)
+    const photo = node('div', '', 'editor-photo-area')
+    let photoTimer: ReturnType<typeof setTimeout> | undefined
+    textField(form, 'Wikimedia Commons photograph', e.tags.wikimedia_commons ?? e.tags.image ?? '', v => {
+      graph.transaction('Edit route photograph', () => graph.setTags(key, { wikimedia_commons: normalizeImage(v), ...(!v.trim() ? { image: '' } : {}) }), `${key}:photo`)
+      clearTimeout(photoTimer)
+      photoTimer = setTimeout(() => { if (photo.isConnected && graph.get(key)) renderPhoto(photo, key) }, 400)
+    })
+    form.append(photo); renderPhoto(photo, key)
+    const attached = graph.attached(key)
+    form.append(node('h2', 'Boulder attachment', 'sector-routes-title'))
+    if (attached.length) {
+      for (const w of attached) {
+        const owner = isBoulder(w) ? w : graph.parents(keyOf(w)).find(isBoulder) ?? w
+        form.append(button(`Attached to ${owner.tags.name || keyOf(owner)}`, () => void select(keyOf(owner))))
+      }
+      form.append(node('p', 'Moving this route also reshapes the boulder.', 'muted'))
+      form.append(button('Detach from boulder', () => void run(async () => {
+        await reader.geometry([key]); graph.transaction('Detach route from boulder', () => graph.detach(key)); renderSelected()
+        message('Detached. Drag the route away freely; it will not immediately snap back to the separation point. Hold Alt to prevent snapping elsewhere.')
+      })))
+    } else form.append(node('p', 'Independent route. Drop onto a boulder edge to attach; hold Alt to keep it independent.', 'muted'))
+    renderMembership(form, key, 'sector')
+  } else if (isBoulder(e)) {
+    if (e.type === 'node') form.append(node('p', 'Legacy point boulder: details only. Creating point boulders and converting them to areas are outside this editor’s scope.'))
+    else {
+      try {
+        const rings = graph.rings(key)
+        form.append(node('p', 'Drag a vertex to reshape. Click a small midpoint to insert a vertex. Select an ordinary vertex to remove it.', 'muted'))
+        form.append(button('Move entire boulder', () => editingMap?.setTool('move-boulder')))
+        const routes = [...new Set(rings.flatMap(w => w.nodes!))].flatMap(id => { const n = graph.get(`node/${id}`); return isRoute(n) ? [n!] : [] })
+        form.append(node('h2', 'Attached routes', 'sector-routes-title'))
+        for (const route of routes) form.append(button(route.tags.name || keyOf(route), () => void select(keyOf(route))))
+      } catch (error) { form.append(node('p', errorMessage(error), 'editor-warning')) }
+    }
+  } else if (kind) {
+    if (kind === 'sector') renderMembership(form, key, 'area')
+    form.append(node('h2', kind === 'area' ? 'Sectors' : 'Routes', 'sector-routes-title'))
+    for (const member of e.members ?? []) {
+      const memberKey: Key = `${member.type}/${member.ref}`, child = graph.get(memberKey)
+      form.append(button(child?.tags.name || memberKey, () => void select(memberKey)))
+    }
+    if (!e.members?.length) form.append(node('p', 'No members.', 'muted'))
   }
-
-  setTag('name', edit.name.trim())
-  setTag('climbing:grade:font', normalizeGrade(edit.grade))
-  setTag('description', edit.description.trim())
-  setTag('wikimedia_commons:path', edit.path.trim())
-
-  const image = normalizeImage(edit.image)
-  const originalImage = normalizeImage(edit.originalImage)
-  if (image !== originalImage) setTag('wikimedia_commons', image)
-
-  const originalSit = edit.originalTags['climbing:start'] === 'sit'
-  if (edit.sit !== originalSit) {
-    if (edit.sit) tags['climbing:start'] = 'sit'
-    else delete tags['climbing:start']
+  if (!(isBoulder(e) && e.type === 'node')) form.append(button(`Delete ${title}`, () => deleteSelected(key), 'danger'))
+  if (e.id > 0) {
+    const link = node('a', 'View object on OpenStreetMap'); link.href = `https://www.openstreetmap.org/${key}`; link.target = '_blank'; link.rel = 'noopener'; content.append(link)
   }
-
-  return tags
+}
+function renderVertex(way: Key, vertex: Key): void {
+  beginPanel('Boulder perimeter vertex')
+  content.append(node('p', vertex), node('p', 'Drag this point to reshape the boulder, or remove it to connect its neighbours.'))
+  content.append(button('Delete perimeter vertex', () => void run(async () => {
+    await reader.references(vertex)
+    graph.transaction('Remove perimeter vertex', () => graph.removeVertex(way, vertex)); editingMap!.vertexSelection = undefined; renderSelected()
+  }), 'danger'), button('Back to feature', renderSelected))
+}
+function renderMembership(parent: HTMLElement, key: Key, kind: 'sector' | 'area'): void {
+  const groups = kind === 'sector' ? graph.sectors(key) : graph.areas(key)
+  parent.append(node('h2', kind === 'sector' ? 'Sector' : 'Area', 'sector-routes-title'))
+  if (groups.length > 1) parent.append(node('p', 'Conflicting memberships: choose one parent or unlink all before export.', 'editor-warning'))
+  if (!groups.length) parent.append(node('p', `No ${kind} assigned.`, 'muted'))
+  for (const group of groups) parent.append(button(group.tags.name || keyOf(group), () => void select(keyOf(group))))
+  parent.append(button(`Choose / create ${kind}`, () => parentPicker(kind, choice => run(async () => {
+    await prepareChoice(choice)
+    graph.transaction(`Assign ${kind}`, () => graph.assign(key, materialize(choice)))
+    renderSelected()
+  }))))
+  if (groups.length) parent.append(button(`Unlink ${kind}`, () => void run(() => { graph.transaction(`Unlink ${kind}`, () => graph.assign(key)); renderSelected() })))
+}
+function deleteSelected(key: Key): void {
+  const e = graph.require(key), kind = groupKind(e)
+  const effect = isRoute(e) ? 'Delete this climbing route? If attached, an ordinary boulder vertex will remain. Unrelated node information will be preserved.' : isBoulder(e) ? 'Delete this mapped boulder from OSM? Its routes will remain as independent points, retaining their sector memberships. This does not merely hide the rock.' : kind === 'sector' ? 'Delete only this sector relationship? Its routes remain, without a sector assignment.' : 'Delete only this area relationship? Its sectors and routes remain; sectors become unassigned to an area.'
+  if (!confirm(effect)) return
+  void run(async () => {
+    await reader.prepareDelete(key)
+    const attached = isRoute(e) ? graph.attached(key)[0] : undefined
+    graph.transaction(`Delete ${kind ?? (isRoute(e) ? 'route' : 'boulder')}`, () => graph.deleteFeature(key))
+    if (attached && graph.get(key)) {
+      const owner = isBoulder(attached) ? attached : graph.parents(keyOf(attached)).find(isBoulder)
+      if (owner) selectLocal(keyOf(owner))
+      editingMap!.vertexSelection = { way: keyOf(attached), node: key }
+      renderVertex(keyOf(attached), key)
+      message('Route deleted locally; the ordinary perimeter vertex remains. You can remove it separately or undo the deletion.')
+    } else renderSelected()
+  })
+}
+function normalizeImage(v: string): string {
+  const match = v.trim().match(/\/wiki\/(File:[^?#]+)/i)
+  if (match) { try { return decodeURIComponent(match[1]).replace(/_/g, ' ') } catch { return v.trim() } }
+  return v.trim().replace(/^file:/i, 'File:')
+}
+function renderPhoto(container: HTMLElement, key: Key): void {
+  container.replaceChildren()
+  const e = graph.require(key), image = e.tags.wikimedia_commons ?? e.tags.image ?? '', path = parsePath(e.tags['wikimedia_commons:path'])
+  if (!image.startsWith('File:')) { container.append(node('p', 'Set a File:… Commons photograph to preview or draw the route line.', 'muted')); return }
+  container.append(renderPhotoBlock(image, path.length ? [{ points: path, color: gradeColor(e.tags['climbing:grade:font'] ?? '') }] : []))
+  container.append(button(path.length ? 'Edit photo route line' : 'Add photo route line', () => void run(async () => {
+    const sector = graph.sectors(key)[0]
+    if (sector) await reader.load(keyOf(sector), true)
+    const others = graph.all().filter(n => isRoute(n) && keyOf(n) !== key && (n.tags.wikimedia_commons ?? n.tags.image ?? '').replace(/_/g, ' ') === image.replace(/_/g, ' '))
+      .map(n => parsePath(n.tags['wikimedia_commons:path'])).filter(p => p.length > 1)
+    createPathEditor(image, path, {
+      onDone: points => { graph.transaction('Edit photo route line', () => graph.setTags(key, { 'wikimedia_commons:path': stringifyPath(points) })); renderPhoto(container, key) },
+      onCancel: () => {}
+    }, others)
+  })))
 }
 
-function tagsEqual(a: Record<string, string>, b: Record<string, string>): boolean {
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
-  for (const key of keys) {
-    if ((a[key] ?? '') !== (b[key] ?? '')) return false
+interface Choice { key?: Key; kind: 'sector' | 'area'; name?: string; description?: string; area?: Choice }
+function dialog(title: string): HTMLDialogElement {
+  const d = node('dialog', '', 'editing-dialog'); d.append(node('h2', title))
+  d.addEventListener('close', () => d.remove()); document.body.append(d); d.showModal(); return d
+}
+/** New parents remain form drafts until the final choice commits one atomic action. */
+function parentPicker(kind: 'sector' | 'area', choose: (choice: Choice) => void | boolean | Promise<void | boolean>): void {
+  const d = dialog(`Choose ${kind}`)
+  let pending = false
+  d.addEventListener('cancel', event => { if (pending) event.preventDefault() })
+  const closeWith = async (choice: Choice) => {
+    if (pending) return
+    pending = true; d.inert = true
+    try { if (await choose(choice) !== false) d.close() }
+    catch (error) { alert(errorMessage(error)) }
+    finally { pending = false; d.inert = false }
   }
-  return true
-}
-
-function hasChanges(edit: RouteEdit): boolean {
-  return !tagsEqual(buildFinalTags(edit), edit.originalTags)
-}
-
-function buildBoulderFinalTags(edit: BoulderEdit): Record<string, string> {
-  const tags = { ...edit.originalTags }
-  const name = edit.name.trim()
-  if (name) tags.name = name
-  else delete tags.name
-  return tags
-}
-
-function boulderHasChanges(edit: BoulderEdit): boolean {
-  return !tagsEqual(buildBoulderFinalTags(edit), edit.originalTags)
-}
-
-function serializeTags(tags: Record<string, string>): string[] {
-  return Object.entries(tags)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `    <tag k="${escapeXml(key)}" v="${escapeXml(value)}" />`)
-}
-
-function buildBoulderChange(edit: BoulderEdit): string | undefined {
-  if (!boulderHasChanges(edit) || !edit.element || edit.version === undefined) return undefined
-
-  const children: string[] = []
-  if (edit.osmType === 'way') {
-    children.push(...(edit.element.nodes ?? []).map(ref => `    <nd ref="${ref}" />`))
-  } else if (edit.osmType === 'relation') {
-    children.push(...(edit.element.members ?? []).map(member =>
-      `    <member type="${member.type}" ref="${member.ref}" role="${escapeXml(member.role ?? '')}" />`
-    ))
+  const search = searchBox(d, kind, e => void closeWith({ key: keyOf(e), kind, name: e.tags.name }))
+  const create = node('details'); create.append(node('summary', `Create missing ${kind}`)); d.append(create)
+  create.append(node('p', 'Search existing matches first to avoid duplicates. This parent is only created when you confirm linking.', 'muted'))
+  let name = '', description = '', area: Choice | undefined
+  textField(create, 'Name', '', v => { name = v })
+  textField(create, 'Description', '', v => { description = v }, true)
+  if (kind === 'sector') {
+    const areaText = node('p', 'No area assigned', 'muted'); create.append(areaText)
+    create.append(button('Choose / create area (optional)', () => parentPicker('area', choice => { area = choice; areaText.textContent = choice.key ? graph.get(choice.key)?.tags.name || choice.name || choice.key : choice.name || 'Unnamed new area' })), button('Clear area choice', () => { area = undefined; areaText.textContent = 'No area assigned' }))
   }
-  children.push(...serializeTags(buildBoulderFinalTags(edit)))
-
-  const coordinates = edit.osmType === 'node'
-    ? ` lat="${edit.element.lat!.toFixed(7)}" lon="${edit.element.lon!.toFixed(7)}"`
-    : ''
-  return [
-    `  <${edit.osmType} id="${edit.id}"${coordinates} version="${edit.version}">`,
-    ...children,
-    `  </${edit.osmType}>`
-  ].join('\n')
+  create.append(button(`Create and link ${kind}`, () => closeWith({ kind, name, description, area })))
+  d.append(button('Cancel', () => d.close())); search.focus()
 }
-
-function buildNodeChange(edit: RouteEdit): string | undefined {
-  if (!hasChanges(edit)) return undefined
-
-  const tags = buildFinalTags(edit)
-  const tagXml = Object.entries(tags)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `    <tag k="${escapeXml(key)}" v="${escapeXml(value)}" />`)
-    .join('\n')
-
-  return [
-    `  <node id="${edit.id}" lat="${edit.lat.toFixed(7)}" lon="${edit.lon.toFixed(7)}" version="${edit.version}">`,
-    tagXml,
-    '  </node>'
-  ].join('\n')
+function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Element) => void): HTMLInputElement {
+  const input = node('input', '', 'editor-input'); input.placeholder = `Search ${kind} by name`; input.setAttribute('aria-label', input.placeholder)
+  const results = node('div', '', 'parent-results')
+  let request = 0
+  const renderResults = (found: Element[]) => {
+    results.replaceChildren()
+    for (const e of found) {
+      const context = `${e.tags.name || `Unnamed ${kind}`} · ${keyOf(e)} · ${e.members?.length ?? 0} members${e.tags.description ? ` · ${e.tags.description}` : ''}`
+      const row = node('div', '', 'parent-result')
+      row.append(button(context, () => choose(e)))
+      if (e.id > 0) {
+        const link = node('a', 'View on OSM'); link.href = `https://www.openstreetmap.org/${keyOf(e)}`; link.target = '_blank'; link.rel = 'noopener'; row.append(link)
+      }
+      results.append(row)
+    }
+  }
+  const search = async () => {
+    const token = ++request
+    const local = graph.all().filter(e => groupKind(e) === kind && (e.tags.name ?? '').toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()))
+    renderResults(local); results.append(node('p', 'Searching OSM… Local matches above are available now.', 'muted'))
+    try {
+      const found = await reader.search(kind, input.value)
+      if (token !== request || !parent.isConnected) return
+      renderResults(found)
+      if (!found.length) results.append(node('p', 'No matches found.'))
+      if (found.length >= 50) results.append(node('p', 'Showing up to 50 OSM matches. Refine the name to narrow your search.', 'muted'))
+    } catch (error) {
+      if (token === request && parent.isConnected) { renderResults(local); results.append(node('p', errorMessage(error), 'editor-warning')) }
+    }
+  }
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); void search() } })
+  parent.append(input, button('Search', () => void search()), results); return input
 }
-
-function editedClimbCount(): number {
-  let count = 0
-  for (const edit of edits.values()) {
-    if (hasChanges(edit)) count++
-  }
-  for (const edit of boulderEdits.values()) {
-    if (boulderHasChanges(edit)) count++
-  }
-  return count
+async function prepareChoice(choice: Choice): Promise<void> {
+  if (choice.key) await reader.select(choice.key)
+  if (choice.area) await prepareChoice(choice.area)
 }
-
-function syncOscButton(): void {
-  const countEl = document.getElementById('osc-count')
-  if (countEl) countEl.textContent = String(editedClimbCount())
+function materialize(choice: Choice): Key {
+  if (choice.key) return choice.key
+  const key = keyOf(graph.createGroup(choice.kind, choice.name ?? '', choice.description ?? ''))
+  if (choice.area) graph.assign(key, materialize(choice.area))
+  return key
 }
-
-function downloadOsc(): void {
-  const pendingRoutes = [...edits.values()].filter(edit => !edit.liveLoaded || edit.version === undefined)
-  const pendingBoulders = [...boulderEdits.values()].filter(edit =>
-    boulderHasChanges(edit) && (!edit.liveLoaded || edit.version === undefined)
-  )
-  const pending = [...pendingRoutes, ...pendingBoulders]
-  if (pending.length > 0) {
-    const failed = pending.filter(edit => edit.liveError)
-    window.alert(
-      failed.length > 0
-        ? `Could not load current OSM data for ${failed.length} edited feature(s). Those changes were not exported.`
-        : `Still loading current OSM data for ${pending.length} edited feature(s). Please wait a moment and try again.`
-    )
-    return
+function findGroup(): void {
+  const d = dialog('Find an existing sector or area')
+  d.append(node('h3', 'Sectors')); searchBox(d, 'sector', e => { d.close(); void select(keyOf(e)) })
+  d.append(node('h3', 'Areas')); searchBox(d, 'area', e => { d.close(); void select(keyOf(e)) })
+  d.append(button('Close', () => d.close()))
+}
+function showReview(): void {
+  if (busy) return
+  reviewDialog?.close(); reviewDialog = dialog('Review unpublished local changes')
+  const d = reviewDialog
+  d.append(node('p', 'Downloading does not publish to OpenStreetMap. Open the file in JOSM to validate, review conflicts, and upload. Your local draft is retained after downloading.'))
+  const changes = graph.changes()
+  if (!changes.length) d.append(node('p', 'No local changes.'))
+  for (const c of changes) {
+    const details = node('details', '', 'change-entry')
+    details.append(node('summary', `${c.action.toUpperCase()} ${c.key} · ${(c.after ?? c.before)!.tags.name || 'Unnamed'}`))
+    if (c.before && c.after) {
+      const notes: string[] = []
+      if (c.before.lon !== c.after.lon || c.before.lat !== c.after.lat) notes.push('Location moved (shared outlines may also change).')
+      if (JSON.stringify(c.before.nodes) !== JSON.stringify(c.after.nodes)) notes.push('Perimeter vertices / route attachment changed.')
+      if (JSON.stringify(c.before.members) !== JSON.stringify(c.after.members)) notes.push('Relationship membership changed.')
+      if (JSON.stringify(c.before.tags) !== JSON.stringify(c.after.tags)) notes.push('Details or feature classification changed.')
+      details.append(node('p', notes.join(' ')))
+    }
+    const diff = node('pre', JSON.stringify({ before: c.before ?? null, after: c.after ?? null }, null, 2)); details.append(diff); d.append(details)
   }
-
-  const elements = [
-    ...[...edits.values()].map(buildNodeChange),
-    ...[...boulderEdits.values()].map(buildBoulderChange)
-  ].filter((element): element is string => element !== undefined)
-
-  if (elements.length === 0) {
-    window.alert('No changes yet. Edit a field above first.')
-    return
-  }
-
-  const xml = [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<osmChange version="0.6" generator="OpenBoulderMap editor">',
-    '  <modify>',
-    elements.join('\n\n'),
-    '  </modify>',
-    '</osmChange>',
-    ''
-  ].join('\n')
-
-  const blob = new Blob([xml], { type: 'application/x-osm+xml;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = 'openbouldermap.osc'
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+  const issues = graph.validate()
+  for (const issue of issues) d.append(node('p', issue, 'editor-warning'))
+  for (const warning of graph.warnings()) d.append(node('p', warning, 'editor-warning'))
+  const status = node('p', '', 'muted'), download = button('Check current OSM data and download .osc', () => void run(async () => {
+    download.disabled = true; status.textContent = 'Checking versions and references against live OSM. Nothing is being uploaded…'
+    try {
+      await reader.preflight()
+      const xml = graph.exportOsc(), url = URL.createObjectURL(new Blob([xml], { type: 'application/x-osm+xml;charset=utf-8' }))
+      const a = node('a'); a.href = url; a.download = 'openbouldermap.osc'; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+      status.textContent = 'Changefile downloaded. Not published: review and upload it through JOSM. Local draft retained.'
+    } catch (error) { status.textContent = errorMessage(error); throw error }
+    finally { download.disabled = false }
+  }))
+  download.disabled = !changes.length || !!issues.length
+  d.append(status, download, button('Close', () => { if (!busy) d.close() }))
+  d.addEventListener('cancel', event => { if (busy) event.preventDefault() })
 }

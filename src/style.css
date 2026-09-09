@@ -432,3 +432,48 @@ html, body, #app { height: 100%; margin: 0; }
 
 .editor-photo-area { margin-top: 2px; }
 
+/* Geometry tools and local editing review */
+.geometry-toolbar {
+  position: absolute; left: 16px; top: 70px; z-index: 20;
+  display: flex; flex-wrap: wrap; gap: 6px; max-width: min(660px, calc(100vw - 420px));
+  padding: 8px; border: 1px solid #d5cfc2; border-radius: 8px;
+  background: rgba(255, 253, 248, .96); box-shadow: 0 2px 8px #0002;
+}
+.editor-action {
+  padding: 7px 10px; border: 1px solid #c8c1b4; border-radius: 5px;
+  background: #faf8f2; color: #23445b; cursor: pointer; font: inherit; font-size: 13px;
+  text-align: left;
+}
+.editor-action:hover:not(:disabled) { background: #e7edf0; }
+.editor-action[aria-pressed="true"] { background: #d4e6f2; border-color: #2f6b8f; }
+.editor-action:focus-visible { outline: 2px solid #2f6b8f; outline-offset: 2px; }
+.editor-action:disabled, .edit-toggle:disabled { opacity: .45; cursor: wait; }
+.editor-action.danger { color: #a52323; border-color: #dcb6b6; }
+.editing-message {
+  position: absolute; bottom: 42px; left: 16px; z-index: 20;
+  max-width: min(700px, calc(100vw - 420px)); padding: 9px 12px;
+  border-radius: 6px; background: #fffdf5ee; box-shadow: 0 1px 6px #0002;
+  font-size: 13px; pointer-events: none;
+}
+.editor-warning { color: #9b3020; padding: 8px; background: #fff0e4; border-radius: 5px; }
+.editing-dialog {
+  border: 1px solid #bdb5a7; border-radius: 10px; padding: 24px;
+  width: min(680px, calc(100vw - 48px)); max-height: 85vh; overflow: auto;
+  background: #fffdf8; color: #222; box-shadow: 0 8px 48px #0004;
+}
+.editing-dialog::backdrop { background: #17212b77; }
+.editing-dialog h2 { margin-top: 0; }
+.editing-dialog > .editor-action { margin: 10px 8px 0 0; }
+.editing-dialog details { margin: 12px 0; padding: 10px; border: 1px solid #ddd5c5; border-radius: 6px; }
+.editing-dialog summary { cursor: pointer; }
+.editing-dialog .editor-field { margin: 12px 0; }
+.parent-results { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.parent-result { display: flex; align-items: baseline; gap: 10px; }
+.parent-result .editor-action { flex: 1; overflow-wrap: anywhere; }
+.parent-result a { font-size: 12px; white-space: nowrap; }
+.change-entry pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 800px) {
+  .geometry-toolbar { max-width: calc(100vw - 32px); }
+  .editing-message { max-width: calc(100vw - 32px); bottom: 28px; }
+}
+

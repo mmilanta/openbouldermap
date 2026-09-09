@@ -3,7 +3,7 @@ import { Protocol } from 'pmtiles'
 import { INITIAL_VIEW } from './config'
 import { buildStyle } from './style'
 import { showRoute, showBoulder, hideSidebar, setRouteNavigator, setSectorNavigator } from './sidebar'
-import { initEditorButton } from './editor'
+import { initEditorButton, initEditorMap, isEditMode } from './editor'
 import { setSelectionMap } from './selection'
 import { routesOnBoulder, setBoulderRoutesMap } from './boulderRoutes'
 
@@ -30,6 +30,7 @@ map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
 
 initEditorButton()
+initEditorMap(map)
 
 // Store for debugging
 ;(window as any).__map = map
@@ -55,6 +56,7 @@ map.on('load', () => {
 })
 
 map.on('click', (e) => {
+  if (isEditMode()) return // The editor handles live geometry and local features.
   // Labels are explicit navigation targets. At sector zoom, route hit circles
   // may sit underneath a sector name, so the name must win the click.
   const hierarchyLabelHits = map.queryRenderedFeatures(e.point, {

@@ -7,6 +7,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:browser": "node tests/editor-browser.mjs",
     "build": "vite build && mkdir -p dist/tiles && cp tiles/climbing.pmtiles dist/tiles/",
     "preview": "vite preview --port 4173",
     "build-tiles": "bash scripts/build-climbing-tiles.sh",
@@ -14,6 +17,7 @@
   },
   "devDependencies": {
     "playwright": "^1.61.1",
+    "tsx": "^4.23.13",
     "typescript": "^5.4.0",
     "vite": "^5.2.0"
   },

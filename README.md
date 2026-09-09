@@ -56,21 +56,89 @@ npm run dev        # http://localhost:5173
 
 ## Editor
 
-A small in-browser editor is available under `/edit` (the pencil button in the
-top-left corner of the map). It can modify existing bouldering route nodes and
-physical boulders:
+The desktop-first editor is available under `/edit` (the pencil button in the
+top-left corner). The agreed scope is in
+[`editor-feature-request.md`](editor-feature-request.md).
 
-- Click a route to edit its name, Font grade, sit-start flag, description,
-  Wikimedia Commons image, and route line (`wikimedia_commons:path`).
-- Click a physical boulder to edit its name. Node, way, and relation boulders
-  are supported.
-- The form loads the element's current tags, geometry, and version from the live OSM API.
-- Changes are kept in memory and accumulate across every feature you edit. The
-  **⬇ Download .osc** button (next to the exit button, top-left) exports them all
-  as one OsmChange file. Open that file in [JOSM](https://josm.openstreetmap.de/)
-  to review and upload the changes to OpenStreetMap.
+### Geometry and details
 
-Nothing is written to OpenStreetMap automatically.
+- **+ Boulder**: click perimeter corners, then **Finish outline** (or Enter).
+  Escape cancels; Backspace removes the last unfinished corner.
+- Select a boulder to drag its vertices, insert vertices using the small midpoint
+  handles, or select an ordinary vertex and delete it. **Move entire boulder**
+  moves the outline and all attached routes together.
+- **+ Route**: click to place a standalone route or snap it onto a boulder edge.
+  Dropping onto an ordinary existing vertex joins the points rather than creating
+  duplicates. Vertices already representing another route cannot be joined.
+- An attached route **is the perimeter node**: moving it reshapes the rock.
+  **Detach from boulder** leaves an ordinary vertex behind and lets the route move
+  independently. Hold **Alt** to avoid snapping when placing or dragging a route.
+- Edit route names, Font grades, start types, descriptions, Commons photographs,
+  and photo route lines (`wikimedia_commons:path`). Boulders support name and
+  description editing.
+- Simple closed ways and multipolygons made of closed rings support geometry
+  editing. Legacy point boulders support details only. Fragmented multipolygons,
+  joins that would destroy other tags/references, and movement of geometry shared
+  with non-boulder ways require JOSM instead. Invalid outlines are rejected.
+
+### Sectors and areas
+
+- A **route**, not a boulder, belongs to at most one sector; a sector belongs to
+  at most one area. Either parent is optional. These are relationships, not drawn
+  boundaries.
+- From a route, choose or create its sector. From a sector, choose or create its
+  area. Search by name uses Overpass for discovery and the live OSM API when a
+  result is selected. Local parents can be reused in the same session.
+- Missing sectors and areas are created inline during linking. Nested creation
+  remains a form draft until the final link is confirmed, and commits as one
+  undoable action. There is no standalone parent-creation tool.
+- **Find sector / area** opens existing groupings to edit their names,
+  descriptions, and memberships or inspect their contents.
+
+### Safe deletion, drafts, and export
+
+- Deleting an attached route leaves its perimeter vertex. Deleting a boulder
+  preserves its routes and their sector memberships. Deleting a sector or area
+  deletes only the relationship, never its contents. Unlinking is separate from
+  deletion. Unrelated references that prevent safe deletion are reported.
+- Undo/redo covers geometry, details, attachment, membership, creation, and
+  deletion. Keyboard shortcuts: **Ctrl/Cmd+Z** and **Ctrl/Cmd+Shift+Z** outside
+  text fields.
+- Unpublished drafts, including undo history and original OSM versions, are saved
+  in browser local storage. On return, choose whether to restore or discard the
+  draft. **Discard local changes** clears the entire session. If browser storage
+  is unavailable or full, the editor warns that the draft is not saved. Detail
+  edits and completed geometry/linking actions are recoverable; unfinished
+  outlines, photo drawings, and parent-creation dialogs are not. Leaving with an
+  unfinished action prompts a warning.
+- **Review changes** or **⬇ Download .osc** shows all creations, modifications,
+  deletions, geometry changes, membership changes, and validation warnings.
+- Before downloading, the editor checks affected original versions and known
+  references against live OSM. Network failures or detected conflicts block
+  export without discarding the local work. JOSM must still perform its own
+  validation and conflict checks before upload.
+- Download the `.osc` file, open it in [JOSM](https://josm.openstreetmap.de/), and
+  review and upload there. Exporting retains the draft and **does not publish**
+  anything. After uploading through JOSM, discard the old local draft before
+  starting another editing session.
+
+Nothing is written to OpenStreetMap automatically. Local previews are visible in
+edit mode; the normal map remains the derived OSM tile snapshot.
+
+### Editor tests
+
+```bash
+npm run typecheck
+npm test                         # pure geometry, history, export, and mocked OSM safety tests
+npx playwright install chromium # one-time browser installation
+npm run test:browser             # starts its own local Vite server; no OSM writes
+npm run build
+```
+
+The browser test exercises drawing, snapping/joining, shared-node dragging,
+detachment, nested parent creation, undo/redo, export, recovery, deletion, search,
+and discard. `BROWSER_EXECUTABLE` can select an existing Chromium installation;
+`EDITOR_TEST_URL` can target an already-running development server.
 
 ## Data model
 

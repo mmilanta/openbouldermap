@@ -4,7 +4,7 @@
 // Selection is driven through MapLibre feature state so the paint properties
 // live in style.ts and the highlight moves/clears with the feature itself.
 
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 
 let map: maplibregl.Map | undefined
 let selectedRouteId: number | undefined

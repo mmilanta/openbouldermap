@@ -1,4 +1,5 @@
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { Protocol } from 'pmtiles'
 import { CLIMBING_METADATA_URL, INITIAL_VIEW } from './config'
 import { buildStyle } from './style'
@@ -11,6 +12,12 @@ import { routesOnBoulder, setBoulderRoutesMap } from './boulderRoutes'
 const protocol = new Protocol({ metadata: true })
 maplibregl.addProtocol('pmtiles', protocol.tile as any)
 
+// Explicitly point MapLibre at its worker. Without this, Vite's dep optimizer
+// resolves the worker relative to the pre-bundled module (node_modules/.vite/deps)
+// and the map fails to load any vector tiles. `?worker&url` routes the worker
+// through Vite's worker pipeline, emitting a self-contained chunk in production.
+maplibregl.setWorkerUrl(workerUrl)
+
 const map = new maplibregl.Map({
   container: 'map',
   style: buildStyle(),
@@ -19,7 +26,7 @@ const map = new maplibregl.Map({
   minZoom: INITIAL_VIEW.minZoom,
   maxZoom: INITIAL_VIEW.maxZoom,
   hash: true,
-  preserveDrawingBuffer: true,
+  canvasContextAttributes: { preserveDrawingBuffer: true },
   attributionControl: false
 })
 

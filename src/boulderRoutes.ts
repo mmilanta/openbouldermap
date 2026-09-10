@@ -1,6 +1,6 @@
 // Map-side lookup of problems lying on/very close to a physical boulder.
 
-import type maplibregl from 'maplibre-gl'
+import type * as maplibregl from 'maplibre-gl'
 
 export interface NearbyBoulderRoute {
   properties: Record<string, any>

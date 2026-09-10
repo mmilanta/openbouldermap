@@ -32,6 +32,10 @@ export class EditingMap {
   private suppressClick = false
   private baseFilters = new Map<string, any>()
   private filterSignature = ''
+  // Latest editor features, kept so hit-testing does not depend on MapLibre's
+  // asynchronous GeoJSON re-parse (queryRenderedFeatures can lag a change).
+  private lastFeatures: GeoJSON.Feature[] = []
+  private lastHandles: GeoJSON.Feature[] = []
   constructor(readonly map: LibreMap, readonly graph: EditGraph, readonly hooks: Hooks) {
     map.on('load', () => this.init())
     map.on('click', e => this.click(e))
@@ -130,6 +134,8 @@ export class EditingMap {
         handles.push(this.feature({ type: 'Point', coordinates: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }, { handle: 'midpoint', way: keyOf(w), segment: i, route: false, selected: false }))
       }
     }
+    this.lastFeatures = features
+    this.lastHandles = handles
     ;(this.map.getSource('edit-features') as GeoJSONSource).setData({ type: 'FeatureCollection', features })
     ;(this.map.getSource('edit-handles') as GeoJSONSource).setData({ type: 'FeatureCollection', features: handles })
     const sketch: GeoJSON.Feature[] = this.drawing.map(p => this.feature({ type: 'Point', coordinates: p }, {}))
@@ -226,12 +232,38 @@ export class EditingMap {
       if (['node', 'way', 'relation'].includes(type) && Number.isFinite(id)) this.hooks.select(`${type}/${id}` as Key)
     }
   }
+  /** Nearest point feature in the latest editor data, in screen space. */
+  private pointHit(source: GeoJSON.Feature[], point: { x: number; y: number }, match: (feature: GeoJSON.Feature) => boolean, maxDistance: number): GeoJSON.Feature | undefined {
+    let best: GeoJSON.Feature | undefined, bestDistance = maxDistance
+    for (const feature of source) {
+      if (feature.geometry.type !== 'Point' || !match(feature)) continue
+      const projected = this.map.project(feature.geometry.coordinates as Position)
+      const distance = Math.hypot(projected.x - point.x, projected.y - point.y)
+      if (distance <= bestDistance) { bestDistance = distance; best = feature }
+    }
+    return best
+  }
+  /** Latest polygon feature containing a coordinate. */
+  private polygonHit(source: GeoJSON.Feature[], longitude: number, latitude: number, match: (feature: GeoJSON.Feature) => boolean): GeoJSON.Feature | undefined {
+    for (const feature of source) {
+      if (!match(feature)) continue
+      const polygons = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates] : feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates : []
+      if (polygons.some(polygon => polygon.some(ring => pointInRing([longitude, latitude], ring as Position[])))) return feature
+    }
+    return undefined
+  }
   private down(e: MapMouseEvent): void {
     if (!this.ready || this.committingDrag || !this.hooks.canInteract() || e.originalEvent.button !== 0 || this.tool === 'route' || this.tool === 'boulder') return
+    // Prefer the rendered hit, but fall back to the latest data because a change
+    // made moments ago may not have been re-parsed into the rendered tiles yet.
     const handle = this.hits(e, ['edit-vertices']).find(f => f.properties.handle === 'vertex')
-    const route = this.hits(e, ['edit-routes']).find(f => f.properties.key === this.selected)
-    const whole = this.tool === 'move-boulder' && this.hits(e, ['edit-boulders']).some(f => f.properties.key === this.selected)
-    const key = whole ? this.selected : handle?.properties.key ?? route?.properties.key
+      ?? this.pointHit(this.lastHandles, e.point, f => f.properties?.handle === 'vertex', 9)
+    const routeHit = this.hits(e, ['edit-routes']).find(f => f.properties.key === this.selected)
+      ?? this.pointHit(this.lastFeatures, e.point, f => f.properties?.kind === 'route', 9)
+    const route = routeHit?.properties?.key === this.selected ? routeHit : undefined
+    const whole = this.tool === 'move-boulder' && (this.hits(e, ['edit-boulders']).some(f => f.properties.key === this.selected)
+      || !!this.polygonHit(this.lastFeatures, e.lngLat.lng, e.lngLat.lat, f => f.properties?.kind === 'boulder' && f.properties?.key === this.selected))
+    const key = whole ? this.selected : handle?.properties?.key ?? route?.properties?.key
     if (!key) return
     e.preventDefault(); this.map.dragPan.disable()
     const start: Position = [e.lngLat.lng, e.lngLat.lat]

@@ -84,14 +84,13 @@ try {
 
   // Nested creation stays local to the dialogs until a final atomic link.
   await page.getByRole('button', { name: 'Choose / create sector', exact: true }).click()
-  await page.locator('dialog').getByText('Create missing sector', { exact: true }).click()
   await page.locator('dialog').getByLabel('Name', { exact: true }).fill('Test sector')
   await page.getByRole('button', { name: 'Choose / create area (optional)', exact: true }).click()
   const areaDialog = page.locator('dialog').last()
-  await areaDialog.getByText('Create missing area', { exact: true }).click()
   await areaDialog.getByLabel('Name', { exact: true }).fill('Test area')
-  await areaDialog.getByRole('button', { name: 'Create and link area', exact: true }).click()
-  await page.getByRole('button', { name: 'Create and link sector', exact: true }).click()
+  await areaDialog.getByRole('button', { name: 'OK', exact: true }).click()
+  await page.getByRole('heading', { name: 'Choose area', exact: true }).waitFor({ state: 'detached' })
+  await page.locator('dialog').getByRole('button', { name: 'OK', exact: true }).click()
   await page.locator('#sidebar').getByRole('button', { name: 'Test sector', exact: true }).waitFor()
   let draft = await graphDraft()
   const relations = Object.values(draft.state.overrides).filter(e => e?.type === 'relation')

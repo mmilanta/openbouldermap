@@ -506,7 +506,20 @@ html, body, #app { height: 100%; margin: 0; }
 .editing-dialog summary { cursor: pointer; }
 .editing-dialog .editor-field { margin: 12px 0; }
 .parent-results { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.search-status { display: flex; align-items: center; gap: 8px; }
+.search-status .muted { margin-top: 0; }
+.search-spinner {
+  flex: none; width: 14px; height: 14px;
+  border: 2px solid rgba(47, 107, 143, 0.25);
+  border-top-color: #2f6b8f;
+  border-radius: 50%;
+  animation: search-spinner-spin 0.7s linear infinite;
+}
+@keyframes search-spinner-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .search-spinner { animation-duration: 1.8s; } }
+.dialog-actions { display: flex; gap: 8px; margin-top: 14px; }
 .parent-result { display: flex; align-items: baseline; gap: 10px; }
+.parent-result.selected .editor-action { background: #d4e6f2; border-color: #2f6b8f; }
 .parent-result .editor-action { flex: 1; overflow-wrap: anywhere; }
 .parent-result a { font-size: 12px; white-space: nowrap; }
 .change-entry pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }

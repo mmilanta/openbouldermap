@@ -400,16 +400,19 @@ function renderVertex(way: Key, vertex: Key): void {
 }
 function renderMembership(parent: HTMLElement, key: Key, kind: 'sector' | 'area'): void {
   const groups = kind === 'sector' ? graph.sectors(key) : graph.areas(key)
+  const assigned = groups.length > 0
   parent.append(node('h2', kind === 'sector' ? 'Sector' : 'Area', 'sector-routes-title'))
   if (groups.length > 1) parent.append(node('p', 'Conflicting memberships: choose one parent or unlink all before export.', 'editor-warning'))
   if (!groups.length) parent.append(node('p', `No ${kind} assigned.`, 'muted'))
   for (const group of groups) parent.append(button(group.tags.name || keyOf(group), () => void select(keyOf(group))))
-  parent.append(button(`Choose / create ${kind}`, () => parentPicker(kind, choice => run(async () => {
+  // A child belongs to at most one parent of this kind, so an existing
+  // assignment is replaced rather than added to.
+  parent.append(button(`${assigned ? 'Change' : 'Choose / create'} ${kind}`, () => parentPicker(kind, choice => run(async () => {
     await prepareChoice(choice)
-    graph.transaction(`Assign ${kind}`, () => graph.assign(key, materialize(choice)))
+    graph.transaction(`${assigned ? 'Change' : 'Assign'} ${kind}`, () => graph.assign(key, materialize(choice)))
     renderSelected()
   }))))
-  if (groups.length) parent.append(button(`Unlink ${kind}`, () => void run(() => { graph.transaction(`Unlink ${kind}`, () => graph.assign(key)); renderSelected() })))
+  if (assigned) parent.append(button(`Unlink ${kind}`, () => void run(() => { graph.transaction(`Unlink ${kind}`, () => graph.assign(key)); renderSelected() })))
 }
 function deleteSelected(key: Key): void {
   const e = graph.require(key), kind = groupKind(e)
@@ -467,8 +470,11 @@ function parentPicker(kind: 'sector' | 'area', choose: (choice: Choice) => void 
     catch (error) { alert(errorMessage(error)) }
     finally { pending = false; d.inert = false }
   }
-  const search = searchBox(d, kind, e => void closeWith({ key: keyOf(e), kind, name: e.tags.name }))
-  const create = node('details'); create.append(node('summary', `Create missing ${kind}`)); d.append(create)
+  let chosen: Element | undefined
+  const search = searchBox(d, kind, e => { chosen = e }, { immediate: false, onReset: () => { chosen = undefined } })
+  // Keep the inline creation form visible without an extra discovery click; the
+  // note inside still asks users to search first.
+  const create = node('details'); create.open = true; create.append(node('summary', `Create missing ${kind}`)); d.append(create)
   create.append(node('p', 'Search existing matches first to avoid duplicates. This parent is only created when you confirm linking.', 'muted'))
   let name = '', description = '', area: Choice | undefined
   textField(create, 'Name', '', v => { name = v })
@@ -477,19 +483,32 @@ function parentPicker(kind: 'sector' | 'area', choose: (choice: Choice) => void 
     const areaText = node('p', 'No area assigned', 'muted'); create.append(areaText)
     create.append(button('Choose / create area (optional)', () => parentPicker('area', choice => { area = choice; areaText.textContent = choice.key ? graph.get(choice.key)?.tags.name || choice.name || choice.key : choice.name || 'Unnamed new area' })), button('Clear area choice', () => { area = undefined; areaText.textContent = 'No area assigned' }))
   }
-  create.append(button(`Create and link ${kind}`, () => closeWith({ kind, name, description, area })))
-  d.append(button('Cancel', () => d.close())); search.focus()
+  const actions = node('div', '', 'dialog-actions')
+  actions.append(
+    button('OK', () => void closeWith(chosen ? { key: keyOf(chosen), kind, name: chosen.tags.name } : { kind, name, description, area })),
+    button('Cancel', () => d.close())
+  )
+  d.append(actions); search.focus()
 }
-function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Element) => void): HTMLInputElement {
+interface SearchOptions { immediate?: boolean; onReset?: () => void }
+function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Element) => void, options: SearchOptions = {}): HTMLInputElement {
   const input = node('input', '', 'editor-input'); input.placeholder = `Search ${kind} by name`; input.setAttribute('aria-label', input.placeholder)
   const results = node('div', '', 'parent-results')
   let request = 0
-  const renderResults = (found: Element[]) => {
+  let selectedRow: HTMLElement | undefined
+  const renderResults = (found: Element[], resetSelection = false) => {
     results.replaceChildren()
+    if (resetSelection) { selectedRow = undefined; options.onReset?.() }
     for (const e of found) {
       const context = `${e.tags.name || `Unnamed ${kind}`} · ${keyOf(e)} · ${e.members?.length ?? 0} members${e.tags.description ? ` · ${e.tags.description}` : ''}`
       const row = node('div', '', 'parent-result')
-      row.append(button(context, () => choose(e)))
+      row.append(button(context, () => {
+        if (options.immediate === false) {
+          selectedRow?.classList.remove('selected')
+          row.classList.add('selected'); selectedRow = row
+        }
+        choose(e)
+      }))
       if (e.id > 0) {
         const link = node('a', 'View on OSM'); link.href = `https://www.openstreetmap.org/${keyOf(e)}`; link.target = '_blank'; link.rel = 'noopener'; row.append(link)
       }
@@ -499,7 +518,11 @@ function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Ele
   const search = async () => {
     const token = ++request
     const local = graph.all().filter(e => groupKind(e) === kind && (e.tags.name ?? '').toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()))
-    renderResults(local); results.append(node('p', 'Searching OSM… Local matches above are available now.', 'muted'))
+    renderResults(local, true)
+    const status = node('div', '', 'search-status')
+    status.append(node('span', '', 'search-spinner'), node('span', 'Searching OSM… Local matches above are available now.', 'muted'))
+    results.append(status)
+    results.setAttribute('aria-busy', 'true')
     try {
       const found = await reader.search(kind, input.value)
       if (token !== request || !parent.isConnected) return
@@ -508,6 +531,8 @@ function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Ele
       if (found.length >= 50) results.append(node('p', 'Showing up to 50 OSM matches. Refine the name to narrow your search.', 'muted'))
     } catch (error) {
       if (token === request && parent.isConnected) { renderResults(local); results.append(node('p', errorMessage(error), 'editor-warning')) }
+    } finally {
+      if (token === request) results.removeAttribute('aria-busy')
     }
   }
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); void search() } })

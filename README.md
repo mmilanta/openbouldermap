@@ -3,6 +3,8 @@
 A worldwide bouldering map built on OpenStreetMap data. OSM is the **source of
 truth**; the app only renders a derived, regenerable snapshot (PMTiles).
 
+**Live map:** [mmilanta.github.io/openbouldermap](https://mmilanta.github.io/openbouldermap)
+
 - **Basemap**: vector tiles from [OpenFreeMap](https://openfreemap.org/) (free, no API key).
 - **Climbing features**: tiny self-hosted PMTiles (boulders + routes only, a few MB globally).
 - **Frontend**: Vite + TypeScript + MapLibre GL JS, reading climbing PMTiles via the `pmtiles` protocol.

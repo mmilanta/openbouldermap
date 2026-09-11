@@ -96,8 +96,16 @@ export class EditingMap {
     if (positions.length) return [positions.reduce((sum, p) => sum + p[0], 0) / positions.length, positions.reduce((sum, p) => sum + p[1], 0) / positions.length]
     // Existing labels can provide a display-only fallback for partially loaded groups.
     const kind = groupKind(e)
-    const tile = kind && this.map.querySourceFeatures('climbing', { sourceLayer: kind === 'area' ? 'areas' : 'sectors' }).find(f => Number(f.properties.osm_id) === e.id && f.properties.osm_type === e.type && f.geometry.type === 'Point')
-    return tile ? (tile.geometry as GeoJSON.Point).coordinates as Position : undefined
+    if (!kind) return undefined
+    const tile = this.map.querySourceFeatures('climbing', { sourceLayer: kind === 'area' ? 'areas' : 'sectors' })
+      .find(f => Number(f.properties.osm_id) === e.id && f.properties.osm_type === e.type && f.geometry.type === 'Point')
+    if (tile) return (tile.geometry as GeoJSON.Point).coordinates as Position
+    // Live edit-mode features live in a single GeoJSON source without source layers.
+    if (this.map.getSource('live')) {
+      const live = this.map.querySourceFeatures('live').find(f => f.properties?.kind === kind && Number(f.properties?.osm_id) === e.id && f.properties?.osm_type === e.type && f.geometry.type === 'Point')
+      if (live) return (live.geometry as GeoJSON.Point).coordinates as Position
+    }
+    return undefined
   }
   render(): void {
     if (!this.ready) return
@@ -150,7 +158,7 @@ export class EditingMap {
     if (signature === this.filterSignature) return
     this.filterSignature = signature
     for (const layer of this.map.getStyle().layers ?? []) {
-      if (!('source' in layer) || layer.source !== 'climbing') continue
+      if (!('source' in layer) || (layer.source !== 'climbing' && layer.source !== 'live')) continue
       if (!this.baseFilters.has(layer.id)) this.baseFilters.set(layer.id, this.map.getFilter(layer.id) ?? true)
       const tests = [...hidden].map(k => { const [type, id] = k.split('/'); return ['all', ['==', ['to-number', ['get', 'osm_id']], Number(id)], ['==', ['coalesce', ['get', 'osm_type'], 'node'], type]] })
       this.map.setFilter(layer.id, ['all', this.baseFilters.get(layer.id), ['!', ['any', ...tests]]] as any)
@@ -177,7 +185,12 @@ export class EditingMap {
     }
     return result
   }
-  private hits(e: MapMouseEvent, layers: string[]): MapGeoJSONFeature[] { return this.ready ? this.map.queryRenderedFeatures(e.point, { layers }) : [] }
+  private hits(e: MapMouseEvent, layers: string[]): MapGeoJSONFeature[] {
+    if (!this.ready) return []
+    // Live layers may not exist yet on the very first frames; only query what is present.
+    const existing = layers.filter(id => this.map.getLayer(id))
+    return existing.length ? this.map.queryRenderedFeatures(e.point, { layers: existing }) : []
+  }
   private context(e: MapMouseEvent): void {
     e.preventDefault(); e.originalEvent.preventDefault()
     this.hooks.dismissContext()
@@ -188,9 +201,9 @@ export class EditingMap {
     }
     const vertex = this.hits(e, ['edit-vertices']).find(f => f.properties.handle === 'vertex')
     const localRoute = this.hits(e, ['edit-routes'])[0]
-    const tileRoute = this.hits(e, ['route', 'route-hit'])[0]
+    const tileRoute = this.hits(e, ['route', 'route-hit', 'live-route', 'live-route-hit'])[0]
     const localBoulder = this.hits(e, ['edit-boulders', 'edit-outlines'])[0]
-    const tileBoulder = this.hits(e, ['boulder', 'boulder-label'])[0]
+    const tileBoulder = this.hits(e, ['boulder', 'boulder-label', 'live-boulder', 'live-boulder-label'])[0]
     const feature = vertex ?? localRoute ?? tileRoute ?? localBoulder ?? tileBoulder
     if (!feature) return
     const props = feature.properties
@@ -226,7 +239,9 @@ export class EditingMap {
     }
     const local = this.hits(e, ['edit-area-names', 'edit-sector-names'])[0] ?? this.hits(e, ['edit-routes', 'edit-boulders'])[0]
     if (local) { this.hooks.select(local.properties.key as Key); return }
-    const tile = this.hits(e, ['sector-label', 'area-label'])[0] ?? this.hits(e, ['route', 'route-hit'])[0] ?? this.hits(e, ['boulder', 'boulder-label', 'boulder-point', 'boulder-point-label', 'sector', 'area'])[0]
+    const tile = this.hits(e, ['sector-label', 'area-label', 'live-sector-label'])[0]
+      ?? this.hits(e, ['route', 'route-hit', 'live-route', 'live-route-hit'])[0]
+      ?? this.hits(e, ['boulder', 'boulder-label', 'boulder-point', 'boulder-point-label', 'sector', 'area', 'live-boulder', 'live-boulder-label', 'live-boulder-point', 'live-boulder-point-label', 'live-sector'])[0]
     if (tile) {
       const props = tile.properties, type = props.osm_type ?? 'node', id = Number(props.osm_id)
       if (['node', 'way', 'relation'].includes(type) && Number.isFinite(id)) this.hooks.select(`${type}/${id}` as Key)

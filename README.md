@@ -134,6 +134,20 @@ top-left corner). The agreed scope is in
 Nothing is written to OpenStreetMap automatically. Local previews are visible in
 edit mode; the normal map remains the derived OSM tile snapshot.
 
+### Live data versus the daily snapshot
+
+Normal rendering, including edit mode while zoomed out, uses the daily PMTiles
+snapshot. Zoom to **z14 or closer** and the editor replaces the snapshot in view
+with climbing features fetched live from the public Overpass API, so the geometry
+you click reflects current OSM instead of data that may be up to a day old. The
+**● live OSM data** chip in the top-left control bar shows the active source.
+Panning or zooming out falls back to the snapshot and issues no requests, and
+viewports too large for an editing session are rejected the same way. Live
+requests fail over across several public Overpass mirrors, remembering the one
+that worked and skipping hosts that recently failed, so a single mirror outage
+does not disable live editing. Editing a feature always re-reads it from the OSM
+API, and export still verifies every affected version and reference.
+
 ### Editor tests
 
 ```bash
@@ -144,10 +158,12 @@ npm run test:browser             # starts its own local Vite server; no OSM writ
 npm run build
 ```
 
-The browser test exercises drawing, snapping/joining, shared-node dragging,
+The browser tests exercise drawing, snapping/joining, shared-node dragging,
 detachment, nested parent creation, undo/redo, export, recovery, deletion, search,
-and discard. `BROWSER_EXECUTABLE` can select an existing Chromium installation;
-`EDITOR_TEST_URL` can target an already-running development server.
+and discard, plus the live-data switch (live layers at close zoom, snapshot
+fallback with no Overpass requests when zoomed out). `BROWSER_EXECUTABLE` can
+select an existing Chromium installation; `EDITOR_TEST_URL` can target an
+already-running development server.
 
 ## Data model
 

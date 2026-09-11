@@ -29,6 +29,7 @@ function setup() {
       }
     }),
     getSource: (id: string) => sources.get(id), addLayer() {},
+    getLayer: (id: string) => ({ id }),
     getStyle: () => ({ layers: [] }), getCanvas: () => ({ style: {} }),
     project: (p: Position) => ({ x: p[0] * 100, y: p[1] * 100 }),
     queryRenderedFeatures: (_point: unknown, { layers }: { layers: string[] }) =>

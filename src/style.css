@@ -380,6 +380,24 @@ html, body, #app { height: 100%; margin: 0; }
 }
 .editor-background-select:focus-visible { outline: 2px solid #666; outline-offset: 2px; }
 
+/* Live-versus-snapshot indicator for edit mode. */
+.editor-live-status {
+  flex-shrink: 0;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .1);
+  color: #555;
+  font: 400 12px Arial, sans-serif;
+  white-space: nowrap;
+}
+.editor-live-status[data-state="live"] { color: #1b7a2b; }
+.editor-live-status[data-state="loading"] { color: #9a6a00; }
+.editor-live-status[data-state="snapshot"] { color: #555; }
+
 .edit-toggle {
   width: 34px;
   height: 34px;

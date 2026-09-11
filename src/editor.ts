@@ -6,6 +6,7 @@ import { gradeColor } from './grades'
 import { EditGraph, groupKind, isBoulder, isRoute, keyOf, type Element, type Key, type Position } from './editing/model'
 import { OsmReader } from './editing/osm'
 import { EditingMap, type Snap, type ContextTarget } from './editing/map'
+import { LiveClimbing, type LiveStatus } from './editing/live'
 import { MapContextMenu, type ContextAction } from './editing/context-menu'
 
 const graph = new EditGraph()
@@ -16,6 +17,8 @@ const DRAFT_KEY = 'openbouldermap.editor.v1'
 const BACKGROUND_KEY = 'openbouldermap.editor.background'
 type EditorBackground = 'map' | 'satellite'
 let editingMap: EditingMap | undefined
+let live: LiveClimbing | undefined
+let liveStatusEl: HTMLElement | undefined
 let selected: Key | undefined
 let busy = false
 let draftSaved = true
@@ -36,6 +39,16 @@ function button(text: string, action: () => void, className = ''): HTMLButtonEle
   const b = node('button', text, `editor-action ${className}`); b.type = 'button'; b.addEventListener('click', action); return b
 }
 function message(_text: string): void { syncToolbar() }
+function setLiveStatus(status: LiveStatus, detail?: string): void {
+  if (!liveStatusEl) return
+  liveStatusEl.textContent = status === 'live' ? '● Live OSM data' : status === 'loading' ? 'Loading live OSM…' : detail ?? 'Daily snapshot'
+  liveStatusEl.dataset.state = status
+  liveStatusEl.title = status === 'live'
+    ? 'Features in view come from the live OSM APIs'
+    : status === 'loading'
+      ? 'Fetching current OSM data for this view'
+      : 'Zoomed out or offline: showing the daily tile snapshot. Zoom in to load live OSM data.'
+}
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error) }
 async function run(action: () => Promise<void> | void): Promise<boolean> {
   if (busy) return false
@@ -103,6 +116,10 @@ export function initEditorButton(map: LibreMap): void {
   })
   backgroundLabel.append(background)
   document.getElementById('editor-controls')!.insertBefore(backgroundLabel, toggle)
+  liveStatusEl = node('span', '', 'editor-live-status')
+  liveStatusEl.setAttribute('role', 'status')
+  setLiveStatus('snapshot')
+  document.getElementById('editor-controls')!.insertBefore(liveStatusEl, toggle)
   // The persisted choice is read before MapLibre necessarily has its style
   // layers. Apply it now for attribution, then again once the map is ready.
   applyBackground()
@@ -168,6 +185,12 @@ function syncToolbar(): void {
 }
 export function initEditorMap(map: LibreMap): void {
   if (!isEditMode()) return
+  // Live layers are registered before the edit overlay so local features and
+  // editing handles always render above the refreshed base geometry.
+  live = new LiveClimbing(map, {
+    onStatus: setLiveStatus,
+    onError: error => console.warn('Live OSM data unavailable:', error)
+  })
   editingMap = new EditingMap(map, graph, {
     canInteract: () => !busy && !document.querySelector('dialog[open], .editor-backdrop'),
     message,
@@ -266,7 +289,7 @@ async function loadVisible(): Promise<void> {
   const map = editingMap.map
   // Only load physical boulders currently visible. Relations are loaded in full,
   // including ring nodes, before being offered as snap targets.
-  const keys = [...new Set(map.queryRenderedFeatures({ layers: ['boulder', 'boulder-label'] }).map(f => `${f.properties.osm_type}/${f.properties.osm_id}` as Key))].filter(k => /^(way|relation)\/\d+$/.test(k) && !visibleLoaded.has(k) && !visibleFailed.has(k))
+  const keys = [...new Set(map.queryRenderedFeatures({ layers: ['boulder', 'boulder-label', 'live-boulder', 'live-boulder-label'].filter(id => map.getLayer(id)) }).map(f => `${f.properties.osm_type}/${f.properties.osm_id}` as Key))].filter(k => /^(way|relation)\/\d+$/.test(k) && !visibleLoaded.has(k) && !visibleFailed.has(k))
   if (!keys.length) return
   visibleLoad = (async () => {
     const failures: string[] = []

@@ -9,7 +9,7 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
-    "test:browser": "node tests/editor-browser.mjs",
+    "test:browser": "node tests/editor-browser.mjs && node tests/editor-live-browser.mjs",
     "build": "vite build && mkdir -p dist/tiles && cp tiles/climbing.pmtiles tiles/climbing-metadata.json dist/tiles/",
     "preview": "vite preview --port 4173",
     "build-tiles": "bash scripts/build-climbing-tiles.sh",

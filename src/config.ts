@@ -29,3 +29,6 @@ export const EDIT_PATH = `${BASE_URL}edit`
 // The climbing-only PMTiles archive is served as a static file.
 export const CLIMBING_PMTILES_URL = `pmtiles://${location.origin}${BASE_URL}tiles/climbing.pmtiles`
 export const CLIMBING_METADATA_URL = `${BASE_URL}tiles/climbing-metadata.json`
+// Static viewer search index, generated from the same PBF as the tiles. The
+// viewer fetches it lazily on first search interaction.
+export const CLIMBING_SEARCH_URL = `${BASE_URL}tiles/climbing-search.json`

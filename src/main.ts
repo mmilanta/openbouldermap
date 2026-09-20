@@ -5,6 +5,7 @@ import { CLIMBING_METADATA_URL, INITIAL_VIEW } from './config'
 import { buildStyle } from './style'
 import { showRoute, showBoulder, hideSidebar, setRouteNavigator, setSectorNavigator } from './sidebar'
 import { isEditMode } from './editMode'
+import { initSearch } from './search'
 import { setSelectionMap } from './selection'
 import { routesOnBoulder, setBoulderRoutesMap } from './boulderRoutes'
 
@@ -54,12 +55,15 @@ void fetch(CLIMBING_METADATA_URL)
   .catch(() => { /* The map remains usable if update metadata is unavailable. */ })
 
 // The editor is a separate chunk: viewers never download it. It is only
-// requested when the app is served on the edit route.
+// requested when the app is served on the edit route. View mode instead gets
+// the worldwide search bar, whose index loads lazily on first interaction.
 if (isEditMode()) {
   void import('./editor').then(({ initEditorButton, initEditorMap }) => {
     initEditorButton(map)
     initEditorMap(map)
   })
+} else {
+  initSearch(map)
 }
 
 // Store for debugging

@@ -87,6 +87,9 @@ trap - EXIT
 echo "==> Extracting sector points from site relations -> data/sectors.geojson"
 osmium cat -f opl "$FILTERED" | python3 scripts/extract-sectors.py
 
+echo "==> Building worldwide search index -> tiles/climbing-search.json"
+osmium cat -f opl "$FILTERED" | python3 scripts/extract-search-index.py
+
 # Planetiler 0.10.2 crashes on an empty FeatureCollection. Add one harmless
 # untagged point; it matches no schema layer and therefore emits no tile feature.
 if ! python3 -c 'import json; raise SystemExit(not json.load(open("data/sectors.geojson"))["features"])'; then

@@ -64,14 +64,14 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # Skip if the tiles did not change vs the base branch.
-          if git diff --quiet HEAD -- tiles/climbing.pmtiles; then
+          if git diff --quiet HEAD -- tiles/climbing.pmtiles tiles/climbing-search.json; then
             echo "No tile changes; nothing to commit."
             echo "pull-request-number=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           git checkout -B "$DATA_BRANCH"
-          git add tiles/climbing.pmtiles tiles/climbing-metadata.json
+          git add tiles/climbing.pmtiles tiles/climbing-metadata.json tiles/climbing-search.json
           git commit -m "chore: update worldwide climbing tiles from Overpass"
           git push --force origin "$DATA_BRANCH"
 

@@ -3,9 +3,10 @@ import type { Map as LibreMap } from 'maplibre-gl'
 import { BASE_URL, EDIT_PATH } from './config'
 import { isEditMode } from './editMode'
 import { setLocalRouteEdits } from './localEdits'
+import { loadSearchIndex, matchPlaces, type PlaceEntry } from './searchIndex'
 import { parsePath, renderPhotoBlock } from './photos'
 import { createPathEditor, stringifyPath } from './editing/photoPath'
-import { gradeColor } from './grades'
+import { gradeSuggestions, isValidGrade, routeGradeColor } from './grades'
 import { EditGraph, groupKind, isBoulder, isRoute, keyOf, type Element, type Key, type Position } from './editing/model'
 import { OsmReader } from './editing/osm'
 import { EditingMap, type Snap, type ContextTarget } from './editing/map'
@@ -347,7 +348,59 @@ function renderSelected(): void {
   textField(form, 'Name', e.tags.name ?? '', v => editTag('name', v))
   textField(form, 'Description', e.tags.description ?? '', v => editTag('description', v), true)
   if (isRoute(e)) {
-    textField(form, 'Grade (Font)', e.tags['climbing:grade:font'] ?? '', v => editTag('climbing:grade:font', v.toUpperCase()))
+    const gradeSystems: Array<{ tag: string; label: string }> = [
+      { tag: 'climbing:grade:font', label: 'Font' },
+      { tag: 'climbing:grade:hueco', label: 'Hueco' }
+    ]
+    const gradeWrap = node('div', '', 'editor-field')
+    gradeWrap.append(node('span', 'Grade', 'editor-field-label'))
+    const gradeRow = node('div', '', 'editor-grade')
+    const gradeSystem = node('select', '', 'editor-input editor-grade-system')
+    gradeSystem.setAttribute('aria-label', 'Grade system')
+    for (const system of gradeSystems) { const option = node('option', system.label); option.value = system.tag; gradeSystem.append(option) }
+    const gradeList = node('datalist')
+    gradeList.id = `grade-values-${Math.random().toString(36).slice(2)}`
+    const gradeInput = node('input', '', 'editor-input editor-grade-value')
+    gradeInput.placeholder = 'e.g. 6A+ / V3'
+    gradeInput.setAttribute('aria-label', 'Grade value')
+    gradeInput.setAttribute('list', gradeList.id)
+    const gradeError = node('span', '', 'editor-grade-error')
+    const setInvalid = (invalid: boolean) => {
+      gradeInput.classList.toggle('invalid', invalid)
+      gradeError.textContent = invalid ? `Enter a valid ${gradeSystem.selectedOptions[0]?.textContent ?? 'grade'} grade.` : ''
+    }
+    const fillSuggestions = () => {
+      gradeList.replaceChildren()
+      for (const value of gradeSuggestions(gradeSystem.value)) { const option = document.createElement('option'); option.value = value; gradeList.append(option) }
+    }
+    const syncGradeInput = () => {
+      gradeInput.value = graph.require(key).tags[gradeSystem.value] ?? ''
+      setInvalid(false)
+      fillSuggestions()
+    }
+    gradeSystem.addEventListener('change', syncGradeInput)
+    gradeInput.addEventListener('input', () => {
+      if (busy) return
+      const tag = gradeSystem.value, current = graph.require(key).tags[tag] ?? '', value = gradeInput.value.trim().toUpperCase()
+      if (!value) {
+        setInvalid(false)
+        if (current) try { editTag(tag, '') } catch (error) { message(errorMessage(error)); alert(errorMessage(error)); gradeInput.value = current }
+        return
+      }
+      if (!isValidGrade(tag, value)) { setInvalid(true); return }
+      setInvalid(false)
+      if (value === current) return
+      try { editTag(tag, value) } catch (error) { message(errorMessage(error)); alert(errorMessage(error)); gradeInput.value = current }
+    })
+    gradeInput.addEventListener('blur', () => {
+      if (!gradeInput.classList.contains('invalid')) return
+      setInvalid(false)
+      gradeInput.value = graph.require(key).tags[gradeSystem.value] ?? ''
+    })
+    syncGradeInput()
+    gradeRow.append(gradeSystem, gradeInput, gradeList)
+    gradeWrap.append(gradeRow, gradeError)
+    form.append(gradeWrap)
     const startLabel = node('label', 'Start type', 'editor-field'), start = node('select', '', 'editor-input')
     const values = [...new Set(['', 'sit', 'stand', 'crouch', e.tags['climbing:start'] ?? ''])]
     for (const v of values) { const o = node('option', v || 'Unknown'); o.value = v; start.append(o) }
@@ -445,7 +498,7 @@ function renderPhoto(container: HTMLElement, key: Key): void {
   container.replaceChildren()
   const e = graph.require(key), image = e.tags.wikimedia_commons ?? e.tags.image ?? '', path = parsePath(e.tags['wikimedia_commons:path'])
   if (!image.startsWith('File:')) { container.append(node('p', 'Set a File:… Commons photograph to preview or draw the route line.', 'muted')); return }
-  container.append(renderPhotoBlock(image, path.length ? [{ points: path, color: gradeColor(e.tags['climbing:grade:font'] ?? '') }] : []))
+  container.append(renderPhotoBlock(image, path.length ? [{ points: path, color: routeGradeColor(e.tags) }] : []))
   container.append(button(path.length ? 'Edit photo route line' : 'Add photo route line', () => void run(async () => {
     const sector = graph.sectors(key)[0]
     if (sector) await reader.load(keyOf(sector), true)
@@ -505,9 +558,9 @@ function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Ele
     results.replaceChildren()
     if (resetSelection) { selectedRow = undefined; options.onReset?.() }
     for (const e of found) {
-      const context = `${e.tags.name || `Unnamed ${kind}`} · ${keyOf(e)} · ${e.members?.length ?? 0} members${e.tags.description ? ` · ${e.tags.description}` : ''}`
+      const details = [keyOf(e), e.members ? `${e.members.length} members` : '', e.tags.description || ''].filter(Boolean).join(' · ')
       const row = node('div', '', 'parent-result')
-      row.append(button(context, () => {
+      row.append(button(`${e.tags.name || `Unnamed ${kind}`} · ${details}`, () => {
         if (options.immediate === false) {
           selectedRow?.classList.remove('selected')
           row.classList.add('selected'); selectedRow = row
@@ -520,20 +573,34 @@ function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Ele
       results.append(row)
     }
   }
+  // Existing features come from the static search index, so discovery works
+  // even when Overpass is unavailable. The picked object is then loaded from
+  // the OSM API by the caller.
+  const asElement = (entry: PlaceEntry): Element => ({
+    type: entry.osm === 'r' ? 'relation' : entry.osm === 'w' ? 'way' : 'node',
+    id: entry.id,
+    tags: { type: 'site', name: entry.name, climbing: entry.kind === 's' ? 'crag' : 'area', 'climbing:boulder': 'yes' },
+    ...(entry.osm === 'n' ? { lon: entry.lon, lat: entry.lat } : {})
+  })
   const search = async () => {
     const token = ++request
-    const local = graph.all().filter(e => groupKind(e) === kind && (e.tags.name ?? '').toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()))
+    const query = input.value.trim()
+    const local = graph.all().filter(e => groupKind(e) === kind && (e.tags.name ?? '').toLocaleLowerCase().includes(query.toLocaleLowerCase()))
     renderResults(local, true)
+    if (query.length < 2) { results.append(node('p', 'Enter at least two characters to search.', 'muted')); return }
     const status = node('div', '', 'search-status')
-    status.append(node('span', '', 'search-spinner'), node('span', 'Searching OSM… Local matches above are available now.', 'muted'))
+    status.append(node('span', '', 'search-spinner'), node('span', 'Searching… Local matches above are available now.', 'muted'))
     results.append(status)
     results.setAttribute('aria-busy', 'true')
     try {
-      const found = await reader.search(kind, input.value)
+      const list = await loadSearchIndex()
       if (token !== request || !parent.isConnected) return
-      renderResults(found)
-      if (!found.length) results.append(node('p', 'No matches found.'))
-      if (found.length >= 50) results.append(node('p', 'Showing up to 50 OSM matches. Refine the name to narrow your search.', 'muted'))
+      const localKeys = new Set(local.map(keyOf))
+      const matches = matchPlaces(list, query, kind === 'sector' ? 's' : 'a').filter(entry => !localKeys.has(keyOf(asElement(entry))))
+      const remote = matches.slice(0, 50).map(asElement)
+      renderResults([...local, ...remote])
+      if (!local.length && !remote.length) results.append(node('p', 'No matches found.'))
+      else if (matches.length > remote.length) results.append(node('p', 'Showing up to 50 matches. Refine the name to narrow your search.', 'muted'))
     } catch (error) {
       if (token === request && parent.isConnected) { renderResults(local); results.append(node('p', errorMessage(error), 'editor-warning')) }
     } finally {

@@ -635,3 +635,10 @@ html, body, #app { height: 100%; margin: 0; }
   color: #8a8a8a;
 }
 .search-result-grade { flex-shrink: 0; color: #2f6b8f; font-weight: 600; }
+
+.search-result-grades { display: flex; flex-shrink: 0; gap: 5px; }
+
+/* ---- editor grade system picker ---- */
+.editor-grade { display: flex; gap: 8px; }
+.editor-grade-system { flex: 0 0 auto; width: auto; }
+.editor-grade-value { flex: 1 1 auto; width: auto; min-width: 0; }

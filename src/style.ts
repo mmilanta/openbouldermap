@@ -1,6 +1,6 @@
 import type { StyleSpecification } from 'maplibre-gl'
 import { BASEMAP_TILES, CLIMBING_PMTILES_URL, SATELLITE_TILES } from './config'
-import { gradeColorExpression, UNKNOWN_GRADE_COLOR } from './grades'
+import { routeGradeColorExpression, UNKNOWN_GRADE_COLOR } from './grades'
 
 const BASEMAP = 'basemap'
 const SATELLITE = 'satellite'
@@ -107,7 +107,7 @@ export function buildStyle(): StyleSpecification {
         'source-layer': 'routes',
         minzoom: 13,
         paint: {
-          'circle-color': gradeColorExpression('climbing:grade:font') as any,
+          'circle-color': routeGradeColorExpression() as any,
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 5.5, 17, 7],
           'circle-stroke-color': [
             'case',

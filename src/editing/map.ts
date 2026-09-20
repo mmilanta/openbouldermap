@@ -1,6 +1,6 @@
 import type { Map as LibreMap, MapMouseEvent, GeoJSONSource, MapGeoJSONFeature } from 'maplibre-gl'
 import { EditGraph, groupKind, isBoulder, isRoute, keyOf, pointInRing, type Key, type Position, type Element } from './model'
-import { gradeColor } from '../grades'
+import { routeGradeColor as gradeColorForTags } from '../grades'
 
 export interface Snap { way: Key; segment: number; position: Position; vertex?: number }
 export interface ContextTarget { key: Key; way?: Key; position: Position; x: number; y: number }
@@ -128,7 +128,7 @@ export class EditingMap {
         const position = this.groupPosition(e)
         if (position) features.push(this.feature({ type: 'Point', coordinates: position }, { ...properties, kind, name: e.tags.name || `Unnamed ${kind}` }))
       }
-      if (isRoute(e)) features.push(this.feature({ type: 'Point', coordinates: this.point(e.id) }, { ...properties, kind: 'route', color: gradeColor(e.tags['climbing:grade:font'] ?? '') }))
+      if (isRoute(e)) features.push(this.feature({ type: 'Point', coordinates: this.point(e.id) }, { ...properties, kind: 'route', color: gradeColorForTags(e.tags) }))
       if (isBoulder(e) && e.type !== 'node') {
         try {
           const rings = this.graph.rings(key)

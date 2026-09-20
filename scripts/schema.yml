@@ -12,6 +12,14 @@ sources:
 
 tag_mappings:
   'climbing:grade:font': string
+  'climbing:grade:hueco': string
+  'climbing:grade:fb': string
+  'climbing:grade:uiaa': string
+  'climbing:grade:french': string
+  'climbing:grade:saxon': string
+  'climbing:grade:polish': string
+  'climbing:grade:yds_class': string
+  'climbing:grade:norwegian': string
   'climbing:start': string
   'climbing:fa': string
   'climbing:length': integer
@@ -137,6 +145,14 @@ layers:
         attributes:
           - { key: name, tag_value: name }
           - { key: 'climbing:grade:font', tag_value: 'climbing:grade:font' }
+          - { key: 'climbing:grade:hueco', tag_value: 'climbing:grade:hueco' }
+          - { key: 'climbing:grade:fb', tag_value: 'climbing:grade:fb' }
+          - { key: 'climbing:grade:uiaa', tag_value: 'climbing:grade:uiaa' }
+          - { key: 'climbing:grade:french', tag_value: 'climbing:grade:french' }
+          - { key: 'climbing:grade:saxon', tag_value: 'climbing:grade:saxon' }
+          - { key: 'climbing:grade:polish', tag_value: 'climbing:grade:polish' }
+          - { key: 'climbing:grade:yds_class', tag_value: 'climbing:grade:yds_class' }
+          - { key: 'climbing:grade:norwegian', tag_value: 'climbing:grade:norwegian' }
           - { key: 'climbing:start', tag_value: 'climbing:start' }
           - { key: description, tag_value: description }
           - { key: 'climbing:fa', tag_value: 'climbing:fa' }

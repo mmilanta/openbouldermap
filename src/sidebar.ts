@@ -1,7 +1,7 @@
 // Sidebar rendering for selected route / boulder features.
 
 import { parsePath, renderPhotoBlock } from './photos'
-import { gradeColor } from './grades'
+import { gradesFromTags, gradeLabel, routeGradeColor, type Grade } from './grades'
 import { fetchProblemSector, fetchSectorArea, fetchAreaSectors, fetchSectorRoutes, type SectorRoute, type SectorSummary } from './sectorRoutes'
 import { isEditMode } from './editMode'
 import { withLocalRouteEdits } from './localEdits'
@@ -77,7 +77,7 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
     return
   }
 
-  const grade = pick(props, 'climbing:grade:font')
+  const grades = gradesFromTags(props)
   const name = pick(props, 'name') ?? 'Untitled route'
   const start = pick(props, 'climbing:start')
   const desc = pick(props, 'description')
@@ -89,11 +89,9 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
   const html: HTMLElement[] = []
   html.push(el('h1', 'route-name', name))
 
-  if (grade) {
-    const chip = el('span', 'grade-chip', grade) as HTMLElement
-    chip.style.backgroundColor = gradeColorFor(grade)
+  if (grades.length) {
     const wrap = el('div', 'grade-row', '')
-    wrap.appendChild(chip)
+    for (const grade of grades) wrap.appendChild(gradeChip(grade))
     if (start) wrap.appendChild(el('span', 'start-tag', startStart(start)))
     html.push(wrap)
   } else {
@@ -104,7 +102,7 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
   if (img && img.startsWith('File:')) {
     const pathStr = pick(props, 'wikimedia_commons:path')
     const existingPoints = parsePath(pathStr)
-    const color = grade ? gradeColorFor(grade) : '#9e9e9e'
+    const color = routeGradeColor(props)
     html.push(renderPhotoBlock(img, existingPoints.length > 0 ? [{ points: existingPoints, color }] : []))
   }
 
@@ -400,10 +398,9 @@ function buildBoulderRouteList(routes: NearbyBoulderRoute[]): HTMLElement {
         const paths = sameImageRoutes.flatMap(candidate => {
           const points = parsePath(pick(candidate.properties, 'wikimedia_commons:path'))
           if (points.length < 2) return []
-          const grade = pick(candidate.properties, 'climbing:grade:font')
           return [{
             points,
-            color: grade ? gradeColorFor(grade) : '#9e9e9e',
+            color: routeGradeColor(candidate.properties),
             key: String(candidate.properties.osm_id)
           }]
         })
@@ -424,14 +421,7 @@ function buildBoulderRouteList(routes: NearbyBoulderRoute[]): HTMLElement {
     routeName.textContent = String(route.properties.name || 'Untitled problem')
     button.appendChild(routeName)
 
-    const grade = pick(route.properties, 'climbing:grade:font')
-    if (grade) {
-      const badge = document.createElement('span')
-      badge.className = 'sector-route-grade'
-      badge.textContent = grade
-      badge.style.backgroundColor = gradeColorFor(grade)
-      button.appendChild(badge)
-    }
+    for (const grade of gradesFromTags(route.properties)) button.appendChild(sectorGradeBadge(grade))
 
     const highlight = (active: boolean) => {
       for (const line of section.querySelectorAll<SVGGElement>('.photo-route-line')) {
@@ -490,14 +480,7 @@ async function loadSectorRoutes(section: HTMLElement, sector: SectorLocation): P
       name.textContent = String(route.properties.name || 'Untitled problem')
       button.appendChild(name)
 
-      const grade = route.properties['climbing:grade:font']
-      if (grade) {
-        const badge = document.createElement('span')
-        badge.className = 'sector-route-grade'
-        badge.textContent = String(grade)
-        badge.style.backgroundColor = gradeColorFor(String(grade))
-        button.appendChild(badge)
-      }
+      for (const grade of gradesFromTags(route.properties)) button.appendChild(sectorGradeBadge(grade))
 
       button.addEventListener('click', () => {
         const routeWithSector: SectorRoute = {
@@ -579,7 +562,21 @@ function startStart(s: string): string {
   return m[s.toLowerCase()] ?? s
 }
 
-function gradeColorFor(g: string): string {
-  return gradeColor(g)
+function gradeChip(grade: Grade): HTMLElement {
+  const chip = document.createElement('span')
+  chip.className = 'grade-chip'
+  chip.textContent = gradeLabel(grade)
+  chip.style.backgroundColor = grade.color
+  chip.title = grade.system.label
+  return chip
+}
+
+function sectorGradeBadge(grade: Grade): HTMLElement {
+  const badge = document.createElement('span')
+  badge.className = 'sector-route-grade'
+  badge.textContent = gradeLabel(grade)
+  badge.style.backgroundColor = grade.color
+  badge.title = grade.system.label
+  return badge
 }
 

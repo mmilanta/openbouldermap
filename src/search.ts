@@ -5,91 +5,22 @@
 // lazily on the first interaction with the search box, so people who only
 // browse never download it.
 import type { Map as LibreMap } from 'maplibre-gl'
-import { CLIMBING_SEARCH_URL } from './config'
+import { gradeColorForTag } from './grades'
+import { loadSearchIndex, normalize, type OsmType, type PlaceEntry, type PlaceKind } from './searchIndex'
 import { showRoute, showBoulder } from './sidebar'
 
-type Kind = 'p' | 's' | 'a'
-type OsmType = 'n' | 'w' | 'r'
-type Row = [string, Kind, OsmType, number, number, number, string?, number?]
-
-interface SearchIndex {
-  parents: [string, string][]
-  rows: Row[]
-}
-
-interface Entry {
-  name: string
-  norm: string
-  kind: Kind
-  osm: OsmType
-  id: number
-  lon: number
-  lat: number
-  grade?: string
-  sector?: string
-  area?: string
-}
-
 const OSM_TYPE: Record<OsmType, string> = { n: 'node', w: 'way', r: 'relation' }
-const KIND_LABEL: Record<Kind, string> = { p: 'Problem', s: 'Sector', a: 'Area' }
-const KIND_ZOOM: Record<Kind, number> = { p: 19, s: 14, a: 11 }
+const KIND_LABEL: Record<PlaceKind, string> = { p: 'Problem', s: 'Sector', a: 'Area' }
+const KIND_ZOOM: Record<PlaceKind, number> = { p: 19, s: 14, a: 11 }
 const MIN_QUERY = 2
 const MAX_RESULTS = 20
 const DEBOUNCE_MS = 120
 
-let entries: Entry[] | undefined
-let loadPromise: Promise<void> | undefined
-
-/** Case- and accent-insensitive form used for matching. */
-function normalize(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase()
-}
-
-async function loadIndex(): Promise<void> {
-  if (entries) return
-  if (!loadPromise) {
-    loadPromise = fetch(CLIMBING_SEARCH_URL)
-      .then(response => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json() as Promise<Row[]>
-      })
-      .then((data: SearchIndex | Row[]) => {
-        const file: SearchIndex = Array.isArray(data) ? { parents: [], rows: data } : data
-        entries = file.rows.map(row => {
-          const entry: Entry = {
-            name: row[0],
-            norm: normalize(row[0]),
-            kind: row[1],
-            osm: row[2],
-            id: row[3],
-            lon: row[4],
-            lat: row[5],
-            grade: row[1] === 'p' ? (row[6] || undefined) : undefined
-          }
-          if (row[1] === 'p') {
-            const parent = file.parents[row[7] ?? -1]
-            if (parent) {
-              entry.sector = parent[0] || undefined
-              entry.area = parent[1] || undefined
-            }
-          }
-          return entry
-        })
-      })
-      .catch(error => {
-        loadPromise = undefined // Allow a retry on the next interaction.
-        throw error
-      })
-  }
-  return loadPromise
-}
-
 /** Rank exact matches, then prefixes, word starts and finally substrings. */
-function search(query: string): Entry[] {
-  if (!entries) return []
+function search(entries: PlaceEntry[], query: string): PlaceEntry[] {
   const q = normalize(query.trim())
   if (q.length < MIN_QUERY) return []
-  const matches: Array<{ entry: Entry; score: number }> = []
+  const matches: Array<{ entry: PlaceEntry; score: number }> = []
   for (const entry of entries) {
     const at = entry.norm.indexOf(q)
     if (at === -1) continue
@@ -126,7 +57,8 @@ export function initSearch(map: LibreMap): void {
   container.append(input, results)
   document.getElementById('app')!.append(container)
 
-  let items: Entry[] = []
+  let items: PlaceEntry[] = []
+  let index: PlaceEntry[] | undefined
   let active = -1
   let timer: number | undefined
   let status: 'idle' | 'loading' | 'failed' = 'idle'
@@ -152,7 +84,7 @@ export function initSearch(map: LibreMap): void {
     if (status === 'failed') return renderStatus('Search is unavailable right now. Try again later.')
     if (requested.length < MIN_QUERY) return close()
 
-    items = search(requested)
+    items = search(index ?? [], requested)
     if (!items.length) return renderStatus('No matches.')
 
     const fragment = document.createDocumentFragment()
@@ -189,11 +121,20 @@ export function initSearch(map: LibreMap): void {
       }
 
       button.append(kind, body)
-      if (entry.grade) {
-        const grade = document.createElement('span')
-        grade.className = 'search-result-grade'
-        grade.textContent = entry.grade
-        button.append(grade)
+      const grades: Array<[string, string]> = []
+      if (entry.font) grades.push(['climbing:grade:font', entry.font])
+      if (entry.hueco) grades.push(['climbing:grade:hueco', entry.hueco])
+      if (grades.length) {
+        const wrap = document.createElement('span')
+        wrap.className = 'search-result-grades'
+        for (const [tagKey, value] of grades) {
+          const grade = document.createElement('span')
+          grade.className = 'search-result-grade'
+          grade.textContent = value
+          grade.style.color = gradeColorForTag(tagKey, value)
+          wrap.append(grade)
+        }
+        button.append(wrap)
       }
       item.append(button)
       fragment.append(item)
@@ -202,14 +143,15 @@ export function initSearch(map: LibreMap): void {
     results.hidden = false
   }
 
-  const open = (entry: Entry) => {
+  const open = (entry: PlaceEntry) => {
     close()
     if (entry.kind === 'p') {
       showRoute({
         name: entry.name,
         osm_type: OSM_TYPE[entry.osm],
         osm_id: entry.id,
-        ...(entry.grade ? { 'climbing:grade:font': entry.grade } : {})
+        ...(entry.font ? { 'climbing:grade:font': entry.font } : {}),
+        ...(entry.hueco ? { 'climbing:grade:hueco': entry.hueco } : {})
       }, entry.lon, entry.lat)
     } else {
       showBoulder({
@@ -223,11 +165,11 @@ export function initSearch(map: LibreMap): void {
   }
 
   const ensureIndex = () => {
-    if (entries || status === 'loading') return
+    if (index || status === 'loading') return
     status = 'loading'
     if (requested.length >= MIN_QUERY) render()
-    void loadIndex()
-      .then(() => { status = 'idle'; render() })
+    void loadSearchIndex()
+      .then(list => { index = list; status = 'idle'; render() })
       .catch(() => { status = 'failed'; render() })
   }
 
@@ -248,7 +190,7 @@ export function initSearch(map: LibreMap): void {
       close()
       return
     }
-    if (!entries) {
+    if (!index) {
       ensureIndex()
       return
     }

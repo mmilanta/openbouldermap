@@ -23,11 +23,15 @@ export const SATELLITE_TILES =
 
 // Deployment base path (Vite base). Kept in one place so the editor can build
 // absolute URLs for its /edit view without hard-coding the repository path.
-export const BASE_URL = import.meta.env.BASE_URL || '/'
+// Guard `import.meta.env` so pure modules can also be imported outside Vite
+// (e.g. in unit tests).
+const viteEnv = (import.meta as any).env ?? {}
+export const BASE_URL = viteEnv.BASE_URL || '/'
 export const EDIT_PATH = `${BASE_URL}edit`
 
 // The climbing-only PMTiles archive is served as a static file.
-export const CLIMBING_PMTILES_URL = `pmtiles://${location.origin}${BASE_URL}tiles/climbing.pmtiles`
+const origin = typeof location !== 'undefined' ? location.origin : ''
+export const CLIMBING_PMTILES_URL = `pmtiles://${origin}${BASE_URL}tiles/climbing.pmtiles`
 export const CLIMBING_METADATA_URL = `${BASE_URL}tiles/climbing-metadata.json`
 // Static viewer search index, generated from the same PBF as the tiles. The
 // viewer fetches it lazily on first search interaction.

@@ -9,6 +9,7 @@ const base = process.env.EDITOR_TEST_URL || 'http://127.0.0.1:5199/'
 const server = process.env.EDITOR_TEST_URL ? undefined : spawn('node', ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5199', '--strictPort'], { stdio: 'pipe' })
 const errors = [], alerts = []
 const editorChunkRequests = []
+let overpassRequests = 0
 let dismissNextConfirmation = false
 let browser
 try {
@@ -28,7 +29,7 @@ try {
   // Keep the tests independent of external raster/glyph services.
   await page.route('https://tile.openstreetmap.org/**', r => r.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') }))
   await page.route('https://demotiles.maplibre.org/**', r => r.fulfill({ contentType: 'application/x-protobuf', body: Buffer.alloc(0) }))
-  await page.route('https://overpass-api.de/api/interpreter', r => r.fulfill({ json: { elements: [] } }))
+  await page.route('https://overpass-api.de/api/interpreter', r => { overpassRequests++; return r.fulfill({ json: { elements: [] } }) })
   page.on('request', request => {
     const path = new URL(request.url()).pathname
     if (/\/src\/editor|editor-[\w-]+\.js|\/src\/editing\//.test(path)) editorChunkRequests.push(path)
@@ -76,6 +77,13 @@ try {
 
   await clickTool('+ Route'); await page.mouse.click(350, 375)
   await page.getByRole('heading', { name: 'Edit route', exact: true }).waitFor()
+  // Grade editor: choose the scale and store Font and Hueco grades separately.
+  const gradeSystem = page.locator('#sidebar').getByLabel('Grade system', { exact: true })
+  const gradeValue = page.locator('#sidebar').getByLabel('Grade value', { exact: true })
+  await gradeSystem.selectOption('climbing:grade:hueco')
+  await gradeValue.fill('V4')
+  await gradeSystem.selectOption('climbing:grade:font')
+  await gradeValue.fill('6C')
   await page.getByRole('button', { name: 'Attached to Browser test rock', exact: true }).waitFor()
   assert.equal(await page.locator('#sidebar').getByRole('button', { name: 'Detach from boulder', exact: true }).count(), 0)
   const attached = (await features()).find(f => f.properties.kind === 'route')
@@ -120,6 +128,8 @@ try {
   const download = await downloadPromise
   const xml = await readFile(await download.path(), 'utf8')
   assert.match(xml, /<create>/); assert.match(xml, /Test sector/); assert.match(xml, /Test area/)
+  assert.match(xml, /k="climbing:grade:font" v="6C"/)
+  assert.match(xml, /k="climbing:grade:hueco" v="V4"/)
   assert.doesNotMatch(xml, /<modify>|<delete>/)
   await page.locator('dialog').getByRole('button', { name: 'Close', exact: true }).click()
 
@@ -152,6 +162,13 @@ try {
 
   // Group search includes locally created parents; deleting the area preserves its sector.
   await clickTool('Find sector / area')
+  // Remote parent discovery comes from the static index, never Overpass.
+  const searchIndex = await (await fetch(`${base}tiles/climbing-search.json`)).json()
+  const remoteSector = searchIndex.rows.find(row => row[1] === 's' && typeof row[0] === 'string' && row[0].length >= 5)
+  const sectorBox = page.getByRole('textbox', { name: 'Search sector by name' })
+  await sectorBox.fill(remoteSector[0])
+  await sectorBox.press('Enter')
+  await page.locator('.parent-result button', { hasText: remoteSector[0] }).first().waitFor()
   await page.getByRole('textbox', { name: 'Search area by name' }).fill('Test area')
   await page.getByRole('textbox', { name: 'Search area by name' }).press('Enter')
   await page.locator('.parent-results').getByRole('button', { name: /Test area/ }).click()
@@ -201,6 +218,7 @@ try {
   await clickTool('Undo')
   assert.equal((await features()).filter(f => f.properties.kind === 'boulder').length, 0)
   assert.deepEqual(alerts, []); assert.deepEqual(errors, [])
+  assert.equal(overpassRequests, 0, 'editor parent search must not call Overpass')
   console.log('Browser editor workflow passed: draw, snap/join, drag, detach, inline hierarchy, undo/redo, export, recovery, safe deletion, search and discard.')
 } finally {
   await browser?.close()

@@ -25,10 +25,11 @@ try {
   const counts = new Map()
   for (const row of rows) counts.set(normalize(row[0]), (counts.get(normalize(row[0])) ?? 0) + 1)
   const pick = (kind, extra = () => true) => rows.find(row => row[1] === kind && counts.get(normalize(row[0])) === 1 && extra(row))
-  const problem = pick('p', row => row[7] >= 0 && parents[row[7]] && (parents[row[7]][0] || parents[row[7]][1]))
+  const problem = pick('p', row => row[8] >= 0 && parents[row[8]] && (parents[row[8]][0] || parents[row[8]][1]))
+  const gradedProblem = pick('p', row => row[6] || row[7])
   const sector = pick('s')
   const area = pick('a')
-  assert.ok(problem && sector && area, 'index must contain a unique problem with context, a sector and an area')
+  assert.ok(problem && gradedProblem && sector && area, 'index must contain a unique problem with context, a graded problem, a sector and an area')
 
   browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) })
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
@@ -58,7 +59,7 @@ try {
   // sidebar and centers the map on it.
   const problemRow = await searchFor(problem)
   const context = (await problemRow.locator('.search-result-meta').textContent())?.trim()
-  assert.ok(context && context.includes(parents[problem[7]][0] || parents[problem[7]][1]), `expected sector/area context, got ${JSON.stringify(context)}`)
+  assert.ok(context && context.includes(parents[problem[8]][0] || parents[problem[8]][1]), `expected sector/area context, got ${JSON.stringify(context)}`)
   await problemRow.click()
   await page.waitForFunction(name => document.querySelector('#sidebar h1')?.textContent?.includes(name), problem[0])
   await page.waitForFunction(([lon, lat]) => {
@@ -66,6 +67,12 @@ try {
     return Math.abs(c.lat - lat) < 0.6 && Math.abs(c.lng - lon) < 0.6
   }, [problem[4], problem[5]], { timeout: 8000 })
   assert.ok(indexRequests.length >= 1, 'the index must load on first interaction')
+
+  // A graded problem shows its V-grade and/or Font grade.
+  const gradedRow = await searchFor(gradedProblem)
+  const shown = (await gradedRow.locator('.search-result-grade').allTextContents()).map(t => t.trim())
+  const expected = [gradedProblem[6], gradedProblem[7]].filter(Boolean)
+  assert.deepEqual(shown, expected, `expected grades ${JSON.stringify(expected)}, got ${JSON.stringify(shown)}`)
 
   // Keyboard navigation selects a sector.
   await page.fill('.search-input', sector[0])

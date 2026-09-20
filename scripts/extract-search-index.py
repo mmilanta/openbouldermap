@@ -13,12 +13,13 @@ Output shape::
 
     {
       "parents": [[sectorName, areaName], ...],
-      "rows": [ [name, kind, osm_type, osm_id, lon, lat, grade, parent] , ... ]
+      "rows": [ [name, kind, osm_type, osm_id, lon, lat, font, hueco, parent] , ... ]
     }
 
     kind:     p = boulder problem, s = sector, a = area
     osm_type: n = node, w = way, r = relation
-    grade:    Font grade for problems ("" if none)
+    font:     Font grade for problems ("" if none)
+    hueco:    Hueco (V) grade for problems ("" if none)
     parent:   index into "parents" for problems (-1 if none); omitted/ignored
               for sectors and areas
 
@@ -158,7 +159,7 @@ def main() -> None:
                 continue
             lon, lat = node_coords[oid]
             if kind == "p":
-                problems.append((name, oid, lon, lat, tags.get("climbing:grade:font", "")))
+                problems.append((name, oid, lon, lat, tags.get("climbing:grade:font", ""), tags.get("climbing:grade:hueco", "")))
             else:
                 # Node-tagged crags/areas are not drawn as polygons by the tiles
                 # but are real, searchable places.
@@ -218,7 +219,7 @@ def main() -> None:
     # ---- mapped hierarchy for problems: problem node -> crag -> area ----
     # The tiles only render bouldering sectors (climbing:boulder=yes), but every
     # route sits inside a mapped climbing crag whose name is useful context.
-    problem_ids = {oid for (_name, oid, _lon, _lat, _grade) in problems}
+    problem_ids = {oid for (_name, oid, _lon, _lat, _font, _hueco) in problems}
     sector_parent: dict[int, int] = {}
     preferred: dict[int, bool] = {}
     for rid, members in relation_members.items():
@@ -264,8 +265,8 @@ def main() -> None:
     # ---- rows ----
     rows: list[list[object]] = []
     rows.extend(node_points)
-    for name, oid, lon, lat, grade in problems:
-        rows.append([name, "p", "n", oid, round(lon, 4), round(lat, 4), grade, problem_parent.get(oid, -1)])
+    for name, oid, lon, lat, font, hueco in problems:
+        rows.append([name, "p", "n", oid, round(lon, 4), round(lat, 4), font, hueco, problem_parent.get(oid, -1)])
 
     for oid, (name, tags) in way_candidates.items():
         point = centroid([node_coords[n] for n in way_nodes.get(oid, []) if n in node_coords])
@@ -292,7 +293,7 @@ def main() -> None:
     problems_n = sum(r[1] == "p" for r in rows)
     sectors_n = sum(r[1] == "s" for r in rows)
     areas_n = sum(r[1] == "a" for r in rows)
-    with_parent = sum(1 for r in rows if r[1] == "p" and r[7] != -1)
+    with_parent = sum(1 for r in rows if r[1] == "p" and r[8] != -1)
     print(f"wrote {len(rows)} search rows ({problems_n} problems, {sectors_n} sectors, {areas_n} areas; "
           f"{with_parent} problems with sector/area context) and {len(parents)} parent pairs to {out_path}")
 

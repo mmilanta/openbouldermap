@@ -86,16 +86,3 @@ test('failed OSM requests remain retryable and never create partial local edits'
     failing = false; await reader.select('node/1'); assert.equal(g.attached('node/1').length, 1)
   })
 })
-test('search treats user input literally and does not ingest Overpass snapshots as originals', async () => {
-  const g = new EditGraph(), reader = new OsmReader(g)
-  await mockApi((url, init) => {
-    assert.equal(url, 'https://overpass-api.de/api/interpreter')
-    assert.equal(init?.method, 'POST')
-    const query = String(init!.body)
-    assert.ok(query.includes('out+meta+50'))
-    return [{ type: 'relation', id: 77, version: 2, tags: { type: 'site', climbing: 'crag', 'climbing:boulder': 'yes', name: 'A.*' }, members: [] }]
-  }, async () => {
-    const found = await reader.search('sector', 'A.*')
-    assert.equal(found[0].id, 77); assert.equal(g.get('relation/77'), undefined)
-  })
-})

@@ -1,4 +1,4 @@
-import { EditGraph, canonical, groupKind, isBoulder, keyOf, type Element, type Key } from './model'
+import { EditGraph, canonical, isBoulder, keyOf, type Element, type Key } from './model'
 
 const API = 'https://api.openstreetmap.org/api/0.6'
 async function elements(url: string, init?: RequestInit): Promise<Element[]> {
@@ -83,15 +83,6 @@ export class OsmReader {
       for (const ring of rings) await this.references(keyOf(ring))
       for (const id of new Set(rings.flatMap(w => w.nodes!))) await this.references(`node/${id}`)
     }
-  }
-  async search(kind: 'sector' | 'area', name: string): Promise<Element[]> {
-    if (name.trim().length < 2) throw new Error('Enter at least two characters to search')
-    const escaped = name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const query = `[out:json][timeout:25];relation["type"="site"]["climbing"="${kind === 'sector' ? 'crag' : 'area'}"]["climbing:boulder"="yes"]["name"~${JSON.stringify(escaped)},i];out meta 50;`
-    const found = await elements('https://overpass-api.de/api/interpreter', { method: 'POST', body: new URLSearchParams({ data: query }) })
-    // Search results are discovery only: fetch selected objects from the live OSM API.
-    const local = this.graph.all().filter(e => groupKind(e) === kind && (e.tags.name ?? '').toLocaleLowerCase().includes(name.trim().toLocaleLowerCase()))
-    return [...new Map([...found, ...local].map(e => [keyOf(e), e])).values()].filter(e => this.graph.get(keyOf(e)) || !this.graph.base[keyOf(e)])
   }
   /** Optimistic checks cover edited elements and all loaded geometry dependencies.
    * Parent-list checks catch newly added references before a destructive export. */

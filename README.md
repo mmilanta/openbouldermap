@@ -66,6 +66,16 @@ never download it. Results rank exact, prefix, word-start then substring
 matches; problem results also show their mapped sector and area. Selecting a
 result flies the map to it and opens its sidebar.
 
+## Grades
+
+Route grades are rendered for two scales: Fontainebleau (`climbing:grade:font`)
+and Hueco / V (`climbing:grade:hueco`). Both are shown when present, each with
+its own green→red ramp; grades are never converted between scales. Any other
+`climbing:grade:*` scale (e.g. `fb`, `uiaa`, `french`) is still displayed, but
+in neutral gray. The editor lets you choose which scale you are entering. Only
+the scales listed in `scripts/schema.yml` are carried into the tiles, so add a
+scale there to surface it in the viewer.
+
 ## Editor
 
 The desktop-first editor is available under `/edit`. There is no on-page entry
@@ -87,7 +97,7 @@ in [`editor-feature-request.md`](editor-feature-request.md).
 - An attached route **is the perimeter node**: moving it reshapes the rock.
   Right-click the route and choose **Detach from boulder** to leave an ordinary
   vertex behind and move the route independently. Hold **Alt** to avoid snapping when placing or dragging a route.
-- Edit route names, Font grades, start types, descriptions, Commons photographs,
+- Edit route names, Font and Hueco grades, start types, descriptions, Commons photographs,
   and photo route lines (`wikimedia_commons:path`). Boulders support name and
   description editing.
 - Simple closed ways and multipolygons made of closed rings support geometry
@@ -101,8 +111,9 @@ in [`editor-feature-request.md`](editor-feature-request.md).
   at most one area. Either parent is optional. These are relationships, not drawn
   boundaries.
 - From a route, choose or create its sector. From a sector, choose or create its
-  area. Search by name uses Overpass for discovery and the live OSM API when a
-  result is selected. Local parents can be reused in the same session.
+  area. Search by name uses the static search index for discovery and the live
+  OSM API when a result is selected, so it keeps working when Overpass is down.
+  Local parents can be reused in the same session.
 - Missing sectors and areas are created inline during linking. Nested creation
   remains a form draft until the final link is confirmed, and commits as one
   undoable action. There is no standalone parent-creation tool.
@@ -166,7 +177,7 @@ and discard. `BROWSER_EXECUTABLE` can select an existing Chromium installation;
 `climbing=boulder` AND `natural∈{bare_rock,stone}` AND `sport=climbing` → dark-gray filled polygon.
 
 ### Routes (points)
-`climbing=route_bottom` → grade-colored dot (Font scale, green→red).
+`climbing=route_bottom` → grade-colored dot (Font or Hueco/V scale, green→red; other scales gray).
 
 ### Areas and sectors
 - **Areas** are `type=site` relations tagged `climbing=area` +

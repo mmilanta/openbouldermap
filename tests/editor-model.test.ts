@@ -81,19 +81,39 @@ test('parent deletion refuses unrelated relations and vertex removal refuses rou
   assert.throws(() => g.transaction('delete', () => g.deleteFeature('way/1')), /parent references/)
   assert.throws(() => g.transaction('remove vertex', () => g.removeVertex('way/1', 'node/1')), /Detach or delete/)
 })
-test('inline creation and assignment is atomic; sectors belong to routes, not boulders', () => {
+test('inline creation and assignment is atomic; rocks, routes and areas link by father', () => {
   const g = fixture(); let sector: Key, area: Key
   g.transaction('create hierarchy', () => {
     area = keyOf(g.createGroup('area', 'New area', 'Description'))
     sector = keyOf(g.createGroup('sector', 'New sector', 'Description'))
-    g.assign(sector, area); g.assign('node/1', sector)
+    g.assign(sector, area); g.assign('node/1', sector); g.assign('way/1', sector)
   })
   assert.equal(g.sectors('node/1')[0].id, Number(sector!.split('/')[1]))
   assert.equal(g.sectors('node/5')[0].id, 1)
   assert.equal(g.areas(sector!)[0].tags.name, 'New area')
-  assert.throws(() => g.transaction('assign boulder', () => g.assign('way/1', sector)), /Only routes and sectors/)
+  assert.deepEqual(g.parentGroups('way/1').map(e => e.id), [Number(sector!.split('/')[1])])
   g.undo(); assert.equal(g.get(sector!), undefined); assert.equal(g.get(area!), undefined); assert.equal(g.sectors('node/1')[0].id, 1)
   g.redo(); assert.equal(g.areas(sector!)[0].tags.name, 'New area')
+})
+
+test('areas nest by father; cycles and excessive depth are refused', () => {
+  const g = fixture(); let a: Key, b: Key, c: Key
+  g.transaction('nest', () => {
+    a = keyOf(g.createGroup('area', 'A', ''))
+    b = keyOf(g.createGroup('area', 'B', ''))
+    c = keyOf(g.createGroup('area', 'C', ''))
+    g.assign(b, a); g.assign(c, b)
+  })
+  assert.equal(g.parentGroups(c!)[0].tags.name, 'B')
+  assert.throws(() => g.transaction('cycle', () => g.assign(a, c!)), /cycle/)
+  assert.throws(() => g.transaction('self', () => g.assign(a, a!)), /cycle/)
+  // Six nested levels would exceed the build cap of rank 5.
+  const deep = new EditGraph(); const ids: Key[] = []
+  deep.transaction('deep', () => { for (let i = 0; i < 6; i++) ids.push(keyOf(deep.createGroup('area', `L${i}`, ''))) })
+  deep.transaction('link', () => { for (let i = 1; i < 6; i++) deep.assign(ids[i], ids[i - 1]) })
+  let extra: Key = 'relation/-1'
+  deep.transaction('extra', () => { extra = keyOf(deep.createGroup('area', 'Extra', '')) })
+  assert.throws(() => deep.transaction('too deep', () => deep.assign(extra, ids[5])), /build limit/)
 })
 test('invalid outlines roll back all geometry changes including temporary nodes', () => {
   const g = fixture(), before = g.serialize()

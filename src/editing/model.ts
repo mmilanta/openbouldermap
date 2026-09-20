@@ -12,6 +12,19 @@ export const isRoute = (e?: Element): boolean => e?.type === 'node' && e.tags.cl
 export const isBoulder = (e?: Element): boolean => e?.tags.climbing === 'boulder' && ['stone', 'bare_rock'].includes(e.tags.natural)
 export const groupKind = (e?: Element): 'sector' | 'area' | undefined => e?.type === 'relation' && e.tags.type === 'site' && e.tags['climbing:boulder'] === 'yes'
   ? e.tags.climbing === 'area' ? 'area' : e.tags.climbing === 'crag' ? 'sector' : undefined : undefined
+
+export type FatherKind = 'sector' | 'area'
+
+/** The single kind of parent an object may have: a rock and a route belong to a
+ * boulder (crag); a boulder and an area belong to an area (areas nest). */
+export const fatherKind = (e?: Element): FatherKind | undefined => {
+  if (!e) return undefined
+  if (isRoute(e) || isBoulder(e)) return 'sector'
+  return groupKind(e) === undefined ? undefined : 'area'
+}
+
+/** Nested areas deeper than this are rejected by scripts/build-hierarchy.py. */
+export const MAX_AREA_RANK = 5
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v))
 export function canonical(e: Element): string {
   return JSON.stringify({ type: e.type, id: e.id, lon: e.lon, lat: e.lat, nodes: e.nodes, members: e.members,
@@ -102,7 +115,12 @@ export class EditGraph {
       e.type === 'relation' && e.members?.some(m => m.type === child.type && m.ref === child.id))
   }
   sectors(route: Key): Element[] { return this.parents(route).filter(e => groupKind(e) === 'sector') }
-  areas(sector: Key): Element[] { return this.parents(sector).filter(e => groupKind(e) === 'area') }
+  areas(key: Key): Element[] { return this.parents(key).filter(e => groupKind(e) === 'area') }
+  /** Current parents of the object's own father kind (at most one is allowed). */
+  parentGroups(key: Key): Element[] {
+    const kind = fatherKind(this.get(key))
+    return kind ? this.parents(key).filter(e => groupKind(e) === kind) : []
+  }
   boulderWays(): Element[] {
     const ringIds = new Set(this.all().filter(e => isBoulder(e) && e.type === 'relation').flatMap(e => (e.members ?? []).filter(m => m.type === 'way').map(m => m.ref)))
     return this.all().filter(e => e.type === 'way' && (isBoulder(e) || ringIds.has(e.id)))
@@ -167,9 +185,10 @@ export class EditGraph {
     if (!this.parents(node).length && !Object.keys(n.tags).length) this.remove(node)
   }
   assign(child: Key, parent?: Key): void {
-    const c = this.require(child), kind = isRoute(c) ? 'sector' : groupKind(c) === 'sector' ? 'area' : undefined
-    if (!kind) throw new Error('Only routes and sectors can be assigned a parent')
-    if (parent && groupKind(this.require(parent)) !== kind) throw new Error(`Choose a ${kind}`)
+    const c = this.require(child), kind = fatherKind(c)
+    if (!kind) throw new Error('This object cannot have a parent')
+    if (parent && groupKind(this.require(parent)) !== kind) throw new Error(`Choose a ${kind === 'sector' ? 'boulder' : 'area'}`)
+    if (parent) { this.assertAssignable(child, parent); this.assertDepth(child, parent) }
     for (const p of this.parents(child).filter(e => groupKind(e) === kind)) {
       if (keyOf(p) === parent) continue
       this.update(keyOf(p), e => { e.members = e.members!.filter(m => !(m.type === c.type && m.ref === c.id)) })
@@ -177,6 +196,39 @@ export class EditGraph {
     if (parent) this.update(parent, e => {
       if (!e.members!.some(m => m.type === c.type && m.ref === c.id)) e.members!.push({ type: c.type, ref: c.id, role: '' })
     })
+  }
+  /** Refuse a parent that is the child itself or one of its descendants. */
+  private assertAssignable(child: Key, parent: Key): void {
+    const stack: Key[] = [parent], seen = new Set<Key>()
+    while (stack.length) {
+      const key = stack.pop()!
+      if (key === child) throw new Error('This would create a cycle in the hierarchy')
+      if (seen.has(key)) continue
+      seen.add(key)
+      for (const p of this.parentGroups(key)) stack.push(keyOf(p))
+    }
+  }
+  /** Keep area nesting within the build-time rank cap. */
+  private assertDepth(child: Key, parent: Key): void {
+    if (groupKind(this.get(child)) !== 'area') return
+    const deepest = this.areaRank(parent) + 1 + this.areaHeight(child)
+    if (deepest > MAX_AREA_RANK) throw new Error(`This would nest areas ${deepest + 1} levels deep, above the build limit of ${MAX_AREA_RANK + 1}. Flatten the hierarchy or edit it in JOSM.`)
+  }
+  private areaRank(area: Key): number {
+    let rank = 0, key = area
+    const seen = new Set<Key>()
+    while (true) {
+      const parent = this.parentGroups(key).find(e => groupKind(e) === 'area')
+      if (!parent) break
+      const pk = keyOf(parent)
+      if (seen.has(pk)) break
+      seen.add(pk); key = pk; rank++
+    }
+    return rank
+  }
+  private areaHeight(area: Key): number {
+    const children = this.all().filter(e => groupKind(e) === 'area' && this.parentGroups(keyOf(e)).some(p => keyOf(p) === area))
+    return children.length ? 1 + Math.max(...children.map(c => this.areaHeight(keyOf(c)))) : 0
   }
   createGroup(kind: 'sector' | 'area', name: string, description: string): Element {
     return this.create('relation', { members: [], tags: { type: 'site', climbing: kind === 'sector' ? 'crag' : 'area', 'climbing:boulder': 'yes', ...(name.trim() ? { name: name.trim() } : {}), ...(description.trim() ? { description: description.trim() } : {}) } })
@@ -191,14 +243,16 @@ export class EditGraph {
       })
       if (!this.parents(key).length && !Object.keys(this.require(key).tags).length) this.remove(key)
     } else if (groupKind(e)) {
-      const expected = groupKind(e) === 'sector' ? 'area' : undefined
       for (const p of this.parents(key)) {
-        if (!expected || groupKind(p) !== expected) throw new Error(`Referenced by ${keyOf(p)}. Remove unrelated references in JOSM before deleting.`)
+        if (groupKind(p) !== 'area') throw new Error(`Referenced by ${keyOf(p)}. Remove unrelated references in JOSM before deleting.`)
         this.update(keyOf(p), r => { r.members = r.members!.filter(m => !(m.type === e.type && m.ref === e.id)) })
       }
       this.remove(key)
     } else if (isBoulder(e)) {
-      if (this.parents(key).length) throw new Error('This boulder has other parent references. Review them in JOSM before deleting.')
+      for (const p of this.parents(key)) {
+        if (!groupKind(p)) throw new Error('This rock has parent references other than its boulder. Review them in JOSM before deleting.')
+        this.update(keyOf(p), r => { r.members = r.members!.filter(m => !(m.type === e.type && m.ref === e.id)) })
+      }
       const rings = this.rings(key)
       this.remove(key)
       for (const ring of rings) {
@@ -245,8 +299,8 @@ export class EditGraph {
     for (const e of this.all()) {
       if (e.type === 'way' && e.nodes?.some(id => this.state.overrides[`node/${id}`] === null)) issues.push(`Deleted node still used by ${keyOf(e)}`)
       if (e.type === 'relation' && e.members?.some(m => this.state.overrides[`${m.type}/${m.ref}`] === null)) issues.push(`Deleted member still used by ${keyOf(e)}`)
-      if (isRoute(e) || groupKind(e) === 'sector') {
-        const parents = isRoute(e) ? this.sectors(keyOf(e)) : this.areas(keyOf(e))
+      if (fatherKind(e)) {
+        const parents = this.parentGroups(keyOf(e))
         if (parents.length > 1 && (changed.has(keyOf(e)) || parents.some(p => changed.has(keyOf(p))))) issues.push(`Conflicting parents for ${keyOf(e)}. Choose one parent before export.`)
       }
     }

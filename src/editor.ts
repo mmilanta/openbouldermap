@@ -7,7 +7,7 @@ import { loadSearchIndex, matchPlaces, type PlaceEntry } from './searchIndex'
 import { parsePath, renderPhotoBlock } from './photos'
 import { createPathEditor, stringifyPath } from './editing/photoPath'
 import { gradeSuggestions, isValidGrade, routeGradeColor } from './grades'
-import { EditGraph, groupKind, isBoulder, isRoute, keyOf, type Element, type Key, type Position } from './editing/model'
+import { EditGraph, fatherKind, groupKind, isBoulder, isRoute, keyOf, type Element, type Key, type Position } from './editing/model'
 import { OsmReader } from './editing/osm'
 import { EditingMap, type Snap, type ContextTarget } from './editing/map'
 import { MapContextMenu, type ContextAction } from './editing/context-menu'
@@ -61,6 +61,8 @@ function saveDraft(): void {
 graph.onChange = () => { editingMap?.render(); syncToolbar(); saveDraft() }
 
 function setEditorBackground(map: LibreMap, background: EditorBackground): void {
+  // The map may still be parsing its style when the editor chunk loads.
+  if (!map.isStyleLoaded()) return
   // The OpenFreeMap basemap is a group of vector layers; toggle them together.
   for (const layer of map.getStyle().layers) {
     if (!layer.id.startsWith('basemap-')) continue
@@ -120,18 +122,20 @@ export function initEditorButton(map: LibreMap): void {
   // The persisted choice is read before MapLibre necessarily has its style
   // layers. Apply it now for attribution, then again once the map is ready.
   applyBackground()
-  if (!map.loaded()) map.once('load', applyBackground)
+  if (!map.isStyleLoaded()) map.once('load', applyBackground)
 
   contextMenu = new MapContextMenu()
   toolbar = node('div', '', 'geometry-toolbar')
   toolbar.setAttribute('aria-label', 'Editing tools')
   const tools: [string, string, () => void][] = [
     ['route', '+ Route', () => void run(async () => { await loadVisible(); editingMap?.setTool('route') })],
-    ['boulder', '+ Boulder', () => editingMap?.setTool('boulder')],
+    ['rock', '+ Rock', () => editingMap?.setTool('boulder')],
+    ['sector', '+ Boulder', () => void run(() => createGroup('sector'))],
+    ['area', '+ Area', () => void run(() => createGroup('area'))],
     ['cancel', 'Cancel action', () => editingMap?.cancel()],
     ['undo', 'Undo', () => { editingMap?.cancel(); graph.undo(); renderSelected() }],
     ['redo', 'Redo', () => { editingMap?.cancel(); graph.redo(); renderSelected() }],
-    ['find', 'Find sector / area', () => findGroup()]
+    ['find', 'Find boulder / area', () => findGroup()]
   ]
   const icons: Record<string, string> = { undo: '↶', redo: '↷' }
   for (const [id, title, action] of tools) {
@@ -166,13 +170,18 @@ export function initEditorButton(map: LibreMap): void {
   })
   syncToolbar()
 }
+function createGroup(kind: 'sector' | 'area'): void {
+  let key: Key | undefined
+  graph.transaction(`Create ${kind === 'sector' ? 'boulder' : 'area'}`, () => { key = keyOf(graph.createGroup(kind, '', '')) })
+  if (key) selectLocal(key)
+}
 function syncToolbar(): void {
   const count = graph.changes().length
   document.getElementById('osc-count')!.textContent = String(count)
   for (const b of toolbar?.querySelectorAll('button') ?? []) {
     b.disabled = busy || b.dataset.tool === 'undo' && !graph.undoLabel || b.dataset.tool === 'redo' && !graph.redoLabel
     if (b.dataset.tool === 'cancel') b.hidden = !editingMap || editingMap.tool === 'select'
-    if (b.dataset.tool === 'route' || b.dataset.tool === 'boulder') b.setAttribute('aria-pressed', String(b.dataset.tool === editingMap?.tool))
+    if (b.dataset.tool === 'route' || b.dataset.tool === 'rock') b.setAttribute('aria-pressed', String((b.dataset.tool === 'rock' ? 'boulder' : 'route') === editingMap?.tool))
     if (b.dataset.tool === 'undo') b.title = graph.undoLabel ?? 'Nothing to undo'
     if (b.dataset.tool === 'redo') b.title = graph.redoLabel ?? 'Nothing to redo'
   }
@@ -254,10 +263,10 @@ function openObjectMenu(target: ContextTarget): void {
     } else if (feature.type === 'node' && way) {
       const ring = graph.require(way)
       const owner = isBoulder(ring) ? ring : graph.parents(way).find(isBoulder)
-      if (!owner) throw new Error('This vertex does not belong to an editable boulder.')
+      if (!owner) throw new Error('This vertex does not belong to an editable rock.')
       selected = keyOf(owner); editingMap!.select(selected)
       editingMap!.vertexSelection = { way, node: key }; renderVertex(way, key)
-      title = 'Boulder perimeter vertex'
+      title = 'Rock perimeter vertex'
       const ringKey = way
       actions.push({ label: 'Delete perimeter vertex', danger: true, run: () => void run(async () => {
         await reader.references(key)
@@ -266,9 +275,9 @@ function openObjectMenu(target: ContextTarget): void {
       }) })
     } else if (isBoulder(feature) && feature.type !== 'node') {
       selected = key; editingMap!.select(key); renderSelected()
-      title = feature.tags.name || 'Boulder'
-      actions.push({ label: 'Move entire boulder', run: () => editingMap!.setTool('move-boulder') },
-        { label: 'Delete boulder', danger: true, run: () => deleteSelected(key) })
+      title = feature.tags.name || 'Rock'
+      actions.push({ label: 'Move entire rock', run: () => editingMap!.setTool('move-boulder') },
+        { label: 'Delete rock', danger: true, run: () => deleteSelected(key) })
     }
     if (contextMenu!.isOpen(token)) contextMenu!.fill(title, actions)
   }).then(success => { if (!success && contextMenu?.isOpen(token)) contextMenu.close() })
@@ -343,7 +352,7 @@ function renderSelected(): void {
     selected = undefined; editingMap?.select(undefined); beginPanel('Edit mode'); content.append(node('p', 'Select a feature, create one, or review your local changes.')); return
   }
   const key = selected, e = graph.require(key), kind = groupKind(e)
-  const title = isRoute(e) ? 'route' : isBoulder(e) ? 'boulder' : kind
+  const title = isRoute(e) ? 'route' : isBoulder(e) ? 'rock' : kind === 'sector' ? (cragHasRock(key) ? 'boulder' : 'sector') : kind
   if (!title) { beginPanel('Unsupported feature'); content.append(node('p', 'This object is not a supported climbing feature. Use JOSM to edit it.')); return }
   beginPanel(`Edit ${title}`)
   content.append(node('p', `${key}${e.version ? ` · OSM version ${e.version}` : ' · new local feature'} · not published`, 'muted'))
@@ -420,65 +429,82 @@ function renderSelected(): void {
     })
     form.append(photo); renderPhoto(photo, key)
     const attached = graph.attached(key)
-    form.append(node('h2', 'Boulder attachment', 'sector-routes-title'))
+    form.append(node('h2', 'Rock outline', 'sector-routes-title'))
     if (attached.length) {
       for (const w of attached) {
         const owner = isBoulder(w) ? w : graph.parents(keyOf(w)).find(isBoulder) ?? w
         form.append(button(`Attached to ${owner.tags.name || keyOf(owner)}`, () => void select(keyOf(owner))))
       }
-      form.append(node('p', 'Moving this route also reshapes the boulder. Right-click the route to detach it or delete it.', 'muted'))
-    } else form.append(node('p', 'Independent route. Drop onto a boulder edge to attach; hold Alt to keep it independent.', 'muted'))
-    renderMembership(form, key, 'sector')
+      form.append(node('p', 'Moving this route also reshapes the rock. Right-click the route to detach it or delete it.', 'muted'))
+    } else form.append(node('p', 'Independent route. Drop onto a rock edge to attach; hold Alt to keep it independent.', 'muted'))
+    renderFather(form, key)
   } else if (isBoulder(e)) {
-    if (e.type === 'node') form.append(node('p', 'Legacy point boulder: details only. Creating point boulders and converting them to areas are outside this editor’s scope.'))
+    if (e.type === 'node') form.append(node('p', 'Legacy point rock: details only. Creating point rocks and converting them to outlines are outside this editor’s scope.'))
     else {
       try {
         const rings = graph.rings(key)
-        form.append(node('p', 'Drag a vertex to reshape. Click a small midpoint to insert a vertex. Right-click an ordinary vertex to remove it, or right-click the boulder to delete it.', 'muted'))
-        form.append(button('Move entire boulder', () => editingMap?.setTool('move-boulder')))
+        form.append(node('p', 'Drag a vertex to reshape. Click a small midpoint to insert a vertex. Right-click an ordinary vertex to remove it, or right-click the rock to delete it.', 'muted'))
+        form.append(button('Move entire rock', () => editingMap?.setTool('move-boulder')))
         const routes = [...new Set(rings.flatMap(w => w.nodes!))].flatMap(id => { const n = graph.get(`node/${id}`); return isRoute(n) ? [n!] : [] })
         form.append(node('h2', 'Attached routes', 'sector-routes-title'))
         for (const route of routes) form.append(button(route.tags.name || keyOf(route), () => void select(keyOf(route))))
       } catch (error) { form.append(node('p', errorMessage(error), 'editor-warning')) }
     }
+    renderFather(form, key)
   } else if (kind) {
-    if (kind === 'sector') renderMembership(form, key, 'area')
-    form.append(node('h2', kind === 'area' ? 'Sectors' : 'Routes', 'sector-routes-title'))
-    for (const member of e.members ?? []) {
-      const memberKey: Key = `${member.type}/${member.ref}`, child = graph.get(memberKey)
-      form.append(button(child?.tags.name || memberKey, () => void select(memberKey)))
-    }
-    if (!e.members?.length) form.append(node('p', 'No members.', 'muted'))
+    renderChildren(form, key, e, kind)
+    renderFather(form, key)
   }
   if (kind) form.append(button(`Delete ${title}`, () => deleteSelected(key), 'danger'))
   if (e.id > 0) {
-    const link = node('a', 'View object on OpenStreetMap'); link.href = `https://www.openstreetmap.org/${key}`; link.target = '_blank'; link.rel = 'noopener'; content.append(link)
+    const link = node('a', 'View object on OpenStreetMap', 'osm-link'); link.href = `https://www.openstreetmap.org/${key}`; link.target = '_blank'; link.rel = 'noopener'; content.append(link)
   }
 }
 function renderVertex(way: Key, vertex: Key): void {
-  beginPanel('Boulder perimeter vertex')
-  content.append(node('p', vertex), node('p', 'Drag this point to reshape the boulder. Right-click it and choose Delete perimeter vertex to connect its neighbours.'))
+  beginPanel('Rock perimeter vertex')
+  content.append(node('p', vertex), node('p', 'Drag this point to reshape the rock. Right-click it and choose Delete perimeter vertex to connect its neighbours.'))
   content.append(button('Back to feature', renderSelected))
 }
-function renderMembership(parent: HTMLElement, key: Key, kind: 'sector' | 'area'): void {
-  const groups = kind === 'sector' ? graph.sectors(key) : graph.areas(key)
-  const assigned = groups.length > 0
-  parent.append(node('h2', kind === 'sector' ? 'Sector' : 'Area', 'sector-routes-title'))
-  if (groups.length > 1) parent.append(node('p', 'Conflicting memberships: choose one parent or unlink all before export.', 'editor-warning'))
-  if (!groups.length) parent.append(node('p', `No ${kind} assigned.`, 'muted'))
-  for (const group of groups) parent.append(button(group.tags.name || keyOf(group), () => void select(keyOf(group))))
-  // A child belongs to at most one parent of this kind, so an existing
-  // assignment is replaced rather than added to.
-  parent.append(button(`${assigned ? 'Change' : 'Choose / create'} ${kind}`, () => parentPicker(kind, choice => run(async () => {
+function cragHasRock(key: Key): boolean {
+  const e = graph.get(key)
+  return !!e?.members?.some(m => isBoulder(graph.get(`${m.type}/${m.ref}`)))
+}
+function renderChildren(form: HTMLElement, key: Key, e: Element, kind: 'sector' | 'area'): void {
+  const members = (e.members ?? []).map(m => graph.get(`${m.type}/${m.ref}`)).filter(Boolean) as Element[]
+  const section = (title: string, items: Element[], empty: string) => {
+    form.append(node('h2', title, 'sector-routes-title'))
+    if (items.length) for (const item of items) form.append(button(item.tags.name || keyOf(item), () => void select(keyOf(item))))
+    else form.append(node('p', empty, 'muted'))
+  }
+  if (kind === 'sector') {
+    section('Rocks', members.filter(isBoulder), 'No rocks. Draw one (+ Rock), then set its Boulder to this one.')
+    section('Problems', members.filter(isRoute), 'No problems. Draw one (+ Route), then set its Boulder to this one.')
+  } else {
+    section('Sub-areas', members.filter(m => groupKind(m) === 'area'), 'No sub-areas. Create one (+ Area), then set its Area to this one.')
+    section('Boulders', members.filter(m => groupKind(m) === 'sector'), 'No boulders. Create one (+ Boulder), then set its Area to this one.')
+  }
+}
+/** The single, uniform parent control shown on every object. */
+function renderFather(form: HTMLElement, key: Key): void {
+  const kind = fatherKind(graph.get(key))
+  if (!kind) return
+  const label = kind === 'sector' ? 'Boulder' : 'Area'
+  const parent = label.toLowerCase()
+  const groups = graph.parentGroups(key)
+  form.append(node('h2', label, 'sector-routes-title'))
+  if (groups.length > 1) form.append(node('p', `Conflicting ${parent} memberships: choose one parent or unlink all before export.`, 'editor-warning'))
+  if (!groups.length) form.append(node('p', `No ${parent} assigned.`, 'muted'))
+  for (const group of groups) form.append(button(group.tags.name || keyOf(group), () => void select(keyOf(group))))
+  form.append(button(`${groups.length ? 'Change' : 'Choose / create'} ${parent}`, () => parentPicker(kind, choice => run(async () => {
     await prepareChoice(choice)
-    graph.transaction(`${assigned ? 'Change' : 'Assign'} ${kind}`, () => graph.assign(key, materialize(choice)))
+    graph.transaction(`${groups.length ? 'Change' : 'Assign'} ${parent}`, () => graph.assign(key, materialize(choice)))
     renderSelected()
   }))))
-  if (assigned) parent.append(button(`Unlink ${kind}`, () => void run(() => { graph.transaction(`Unlink ${kind}`, () => graph.assign(key)); renderSelected() })))
+  if (groups.length) form.append(button(`Unlink ${parent}`, () => void run(() => { graph.transaction(`Unlink ${parent}`, () => graph.assign(key)); renderSelected() })))
 }
 function deleteSelected(key: Key): void {
   const e = graph.require(key), kind = groupKind(e)
-  const effect = isRoute(e) ? 'Delete this climbing route? If attached, an ordinary boulder vertex will remain. Unrelated node information will be preserved.' : isBoulder(e) ? 'Delete this mapped boulder from OSM? Its routes will remain as independent points, retaining their sector memberships. This does not merely hide the rock.' : kind === 'sector' ? 'Delete only this sector relationship? Its routes remain, without a sector assignment.' : 'Delete only this area relationship? Its sectors and routes remain; sectors become unassigned to an area.'
+  const effect = isRoute(e) ? 'Delete this climbing route? If attached, an ordinary rock vertex will remain. Unrelated node information will be preserved.' : isBoulder(e) ? 'Delete this mapped rock from OSM? Its routes will remain as independent points, retaining their boulder membership.' : kind === 'sector' ? 'Delete only this boulder relationship? Its rocks and routes remain, without a boulder assignment.' : 'Delete only this area relationship? Its sub-areas and boulders remain, unassigned.'
   if (!confirm(effect)) return
   void run(async () => {
     await reader.prepareDelete(key)
@@ -515,14 +541,15 @@ function renderPhoto(container: HTMLElement, key: Key): void {
   })))
 }
 
-interface Choice { key?: Key; kind: 'sector' | 'area'; name?: string; description?: string; area?: Choice }
+interface Choice { key?: Key; kind: 'sector' | 'area'; name?: string; description?: string }
 function dialog(title: string): HTMLDialogElement {
   const d = node('dialog', '', 'editing-dialog'); d.append(node('h2', title))
   d.addEventListener('close', () => d.remove()); document.body.append(d); d.showModal(); return d
 }
 /** New parents remain form drafts until the final choice commits one atomic action. */
 function parentPicker(kind: 'sector' | 'area', choose: (choice: Choice) => void | boolean | Promise<void | boolean>): void {
-  const d = dialog(`Choose ${kind}`)
+  const label = kind === 'sector' ? 'boulder' : 'area'
+  const d = dialog(`Choose ${label}`)
   let pending = false
   d.addEventListener('cancel', event => { if (pending) event.preventDefault() })
   const closeWith = async (choice: Choice) => {
@@ -535,26 +562,23 @@ function parentPicker(kind: 'sector' | 'area', choose: (choice: Choice) => void 
   let chosen: Element | undefined
   const search = searchBox(d, kind, e => { chosen = e }, { immediate: false, onReset: () => { chosen = undefined } })
   // Keep the inline creation form visible without an extra discovery click; the
-  // note inside still asks users to search first.
-  const create = node('details'); create.open = true; create.append(node('summary', `Create missing ${kind}`)); d.append(create)
+  // note inside still asks users to search first. A new parent is created empty:
+  // navigate to it afterwards to give it a father of its own.
+  const create = node('details'); create.open = true; create.append(node('summary', `Create missing ${label}`)); d.append(create)
   create.append(node('p', 'Search existing matches first to avoid duplicates. This parent is only created when you confirm linking.', 'muted'))
-  let name = '', description = '', area: Choice | undefined
+  let name = '', description = ''
   textField(create, 'Name', '', v => { name = v })
   textField(create, 'Description', '', v => { description = v }, true)
-  if (kind === 'sector') {
-    const areaText = node('p', 'No area assigned', 'muted'); create.append(areaText)
-    create.append(button('Choose / create area (optional)', () => parentPicker('area', choice => { area = choice; areaText.textContent = choice.key ? graph.get(choice.key)?.tags.name || choice.name || choice.key : choice.name || 'Unnamed new area' })), button('Clear area choice', () => { area = undefined; areaText.textContent = 'No area assigned' }))
-  }
   const actions = node('div', '', 'dialog-actions')
   actions.append(
-    button('OK', () => void closeWith(chosen ? { key: keyOf(chosen), kind, name: chosen.tags.name } : { kind, name, description, area })),
+    button('OK', () => void closeWith(chosen ? { key: keyOf(chosen), kind, name: chosen.tags.name } : { kind, name, description })),
     button('Cancel', () => d.close())
   )
   d.append(actions); search.focus()
 }
 interface SearchOptions { immediate?: boolean; onReset?: () => void }
 function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Element) => void, options: SearchOptions = {}): HTMLInputElement {
-  const input = node('input', '', 'editor-input'); input.placeholder = `Search ${kind} by name`; input.setAttribute('aria-label', input.placeholder)
+  const input = node('input', '', 'editor-input'); input.placeholder = `Search ${kind === 'sector' ? 'boulder' : 'area'} by name`; input.setAttribute('aria-label', input.placeholder)
   const results = node('div', '', 'parent-results')
   let request = 0
   let selectedRow: HTMLElement | undefined
@@ -589,9 +613,9 @@ function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Ele
   const search = async () => {
     const token = ++request
     const query = input.value.trim()
-    const local = graph.all().filter(e => groupKind(e) === kind && (e.tags.name ?? '').toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+    const local = graph.all().filter(e => groupKind(e) === kind)
     renderResults(local, true)
-    if (query.length < 2) { results.append(node('p', 'Enter at least two characters to search.', 'muted')); return }
+    if (query.length < 2) { results.append(node('p', 'Enter at least two characters to search OpenStreetMap by name. Local objects are listed above.', 'muted')); return }
     const status = node('div', '', 'search-status')
     status.append(node('span', '', 'search-spinner'), node('span', 'Searching… Local matches above are available now.', 'muted'))
     results.append(status)
@@ -612,21 +636,20 @@ function searchBox(parent: HTMLElement, kind: 'sector' | 'area', choose: (e: Ele
     }
   }
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); void search() } })
-  parent.append(input, button('Search', () => void search()), results); return input
+  parent.append(input, button('Search', () => void search()), results)
+  void search() // Show local (in-session) objects straight away.
+  return input
 }
 async function prepareChoice(choice: Choice): Promise<void> {
   if (choice.key) await reader.select(choice.key)
-  if (choice.area) await prepareChoice(choice.area)
 }
 function materialize(choice: Choice): Key {
   if (choice.key) return choice.key
-  const key = keyOf(graph.createGroup(choice.kind, choice.name ?? '', choice.description ?? ''))
-  if (choice.area) graph.assign(key, materialize(choice.area))
-  return key
+  return keyOf(graph.createGroup(choice.kind, choice.name ?? '', choice.description ?? ''))
 }
 function findGroup(): void {
-  const d = dialog('Find an existing sector or area')
-  d.append(node('h3', 'Sectors')); searchBox(d, 'sector', e => { d.close(); void select(keyOf(e)) })
+  const d = dialog('Find an existing boulder or area')
+  d.append(node('h3', 'Boulders')); searchBox(d, 'sector', e => { d.close(); void select(keyOf(e)) })
   d.append(node('h3', 'Areas')); searchBox(d, 'area', e => { d.close(); void select(keyOf(e)) })
   d.append(button('Close', () => d.close()))
 }

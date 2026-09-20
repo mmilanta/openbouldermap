@@ -205,8 +205,13 @@ export class EditingMap {
     if (!this.hooks.canInteract()) { canvas.style.cursor = ''; return }
     if (this.tool === 'route' || this.tool === 'boulder') { canvas.style.cursor = 'crosshair'; return }
     if (this.panning || this.drag) { canvas.style.cursor = 'grabbing'; return }
+    if (e === undefined) { canvas.style.cursor = 'grab'; return }
     const layers = POINT_CURSOR_LAYERS.filter(id => this.map.getLayer(id))
-    const overNode = e !== undefined && layers.length > 0 && this.map.queryRenderedFeatures(e.point, { layers }).length > 0
+    // queryRenderedFeatures lags a just-added handle, so also probe the latest
+    // editor data (same fallback the drag handler uses).
+    const overNode = (layers.length > 0 && this.map.queryRenderedFeatures(e.point, { layers }).length > 0)
+      || this.pointHit(this.lastHandles, e.point, () => true, 8) !== undefined
+      || this.pointHit(this.lastFeatures, e.point, f => f.properties?.kind === 'route', 8) !== undefined
     canvas.style.cursor = overNode ? 'pointer' : 'grab'
   }
   private context(e: MapMouseEvent): void {

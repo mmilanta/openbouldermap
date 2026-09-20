@@ -16,6 +16,10 @@
 set -euo pipefail
 
 ENDPOINT="${OVERPASS_ENDPOINT:-https://overpass-api.de/api/interpreter}"
+# overpass-api.de's mod_security rejects generic/scraper User-Agents (including
+# curl's default) with HTTP 406 before the query reaches Overpass. OSM's usage
+# policy also requires a meaningful, identifying User-Agent.
+USER_AGENT="${OVERPASS_USER_AGENT:-openbouldermap/0.2.0 (+https://openbouldermap.org)}"
 OUTPUT="data/overpass-climbing.osm.pbf"
 BBOX=""
 KEEP_PARTS=false
@@ -35,6 +39,7 @@ Options:
 
 Environment:
   OVERPASS_ENDPOINT    Alternative to --endpoint
+  OVERPASS_USER_AGENT  User-Agent sent to Overpass (must identify the app)
 EOF
 }
 
@@ -117,6 +122,7 @@ EOF
   for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
     rm -f "$XML"
     HTTP_CODE="$(curl -sS -L \
+      -A "$USER_AGENT" \
       --connect-timeout 30 --max-time 1900 \
       --retry 2 --retry-all-errors --retry-delay 10 \
       -o "$XML" -w '%{http_code}' \

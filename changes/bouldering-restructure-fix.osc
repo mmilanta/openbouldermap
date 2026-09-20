@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osmChange version="0.6" generator="OpenBoulderMap boulder-restructure-fix">
+  <modify>
+    <relation id="21057007" version="4">
+      <member type="node" ref="13979019855" role="" />
+      <member type="relation" ref="21419930" role="" />
+      <member type="relation" ref="21419897" role="" />
+      <member type="relation" ref="21419898" role="" />
+      <member type="relation" ref="21419899" role="" />
+      <member type="relation" ref="21419900" role="" />
+      <member type="relation" ref="21419901" role="" />
+      <member type="relation" ref="21419902" role="" />
+      <member type="relation" ref="21419903" role="" />
+      <member type="relation" ref="21419904" role="" />
+      <member type="relation" ref="21419905" role="" />
+      <member type="relation" ref="21419921" role="" />
+      <member type="relation" ref="21419922" role="" />
+      <member type="relation" ref="21419923" role="" />
+      <member type="relation" ref="21419924" role="" />
+      <member type="relation" ref="21419925" role="" />
+      <member type="relation" ref="21419926" role="" />
+      <member type="relation" ref="21419927" role="" />
+      <member type="relation" ref="21419928" role="" />
+      <member type="relation" ref="21419929" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Paese" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21060002" version="5">
+      <member type="relation" ref="21419908" role="" />
+      <member type="relation" ref="21419906" role="" />
+      <member type="relation" ref="21419907" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Doctor Med Dent" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21358471" version="2">
+      <member type="relation" ref="21419941" role="" />
+      <member type="relation" ref="21419940" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Border Line" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21360262" version="2">
+      <member type="relation" ref="21419944" role="" />
+      <member type="relation" ref="21419920" role="" />
+      <member type="relation" ref="21419942" role="" />
+      <member type="relation" ref="21419943" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="River" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21363583" version="2">
+      <member type="relation" ref="21419935" role="" />
+      <member type="relation" ref="21419910" role="" />
+      <member type="relation" ref="21419911" role="" />
+      <member type="relation" ref="21419913" role="" />
+      <member type="relation" ref="21419914" role="" />
+      <member type="relation" ref="21419915" role="" />
+      <member type="relation" ref="21419916" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Suworrow" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419520" version="4">
+      <member type="relation" ref="21419918" role="" />
+      <member type="relation" ref="21419917" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Schöllenen" />
+      <tag k="type" v="site" />
+    </relation>
+  </modify>
+</osmChange>

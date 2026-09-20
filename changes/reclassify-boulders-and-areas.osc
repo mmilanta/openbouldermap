@@ -1,0 +1,704 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osmChange version="0.6" generator="OpenBoulderMap boulder-crag-area realign">
+  <modify>
+    <relation id="21419897" version="1">
+      <member type="way" ref="1322999750" role="" />
+      <member type="node" ref="13978961513" role="" />
+      <member type="node" ref="13978961514" role="" />
+      <member type="node" ref="13979019847" role="" />
+      <member type="node" ref="13979019848" role="" />
+      <member type="node" ref="13979019849" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419898" version="1">
+      <member type="way" ref="1322999751" role="" />
+      <member type="node" ref="13905616071" role="" />
+      <member type="node" ref="13905667417" role="" />
+      <member type="node" ref="13905667418" role="" />
+      <member type="node" ref="13905704525" role="" />
+      <member type="node" ref="13905717719" role="" />
+      <member type="node" ref="13905718787" role="" />
+      <member type="node" ref="13905719815" role="" />
+      <member type="node" ref="13905722935" role="" />
+      <member type="node" ref="13905722936" role="" />
+      <member type="node" ref="13905796997" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419899" version="1">
+      <member type="way" ref="1322999752" role="" />
+      <member type="node" ref="12242203419" role="" />
+      <member type="node" ref="12242203421" role="" />
+      <member type="node" ref="13905812375" role="" />
+      <member type="node" ref="13905812376" role="" />
+      <member type="node" ref="13905812377" role="" />
+      <member type="node" ref="13979019852" role="" />
+      <member type="node" ref="13979019853" role="" />
+      <member type="node" ref="13979019854" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419900" version="1">
+      <member type="way" ref="1322999753" role="" />
+      <member type="node" ref="12242203427" role="" />
+      <member type="node" ref="13978961515" role="" />
+      <member type="node" ref="13978961516" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419901" version="1">
+      <member type="way" ref="1322999754" role="" />
+      <member type="node" ref="12242203435" role="" />
+      <member type="node" ref="13983285618" role="" />
+      <member type="node" ref="13983285619" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419902" version="1">
+      <member type="way" ref="1322999755" role="" />
+      <member type="node" ref="13979019850" role="" />
+      <member type="node" ref="13979019851" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419903" version="1">
+      <member type="way" ref="1323704475" role="" />
+      <member type="node" ref="13978961529" role="" />
+      <member type="node" ref="13978961530" role="" />
+      <member type="node" ref="13978961531" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419904" version="1">
+      <member type="way" ref="1323704476" role="" />
+      <member type="node" ref="12249090691" role="" />
+      <member type="node" ref="13978961527" role="" />
+      <member type="node" ref="13978961528" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419905" version="1">
+      <member type="way" ref="1323802385" role="" />
+      <member type="node" ref="12250041347" role="" />
+      <member type="node" ref="13979019843" role="" />
+      <member type="node" ref="13979019844" role="" />
+      <member type="node" ref="13979019845" role="" />
+      <member type="node" ref="13979019846" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419906" version="1">
+      <member type="way" ref="1327302073" role="" />
+      <member type="node" ref="12279289915" role="" />
+      <member type="node" ref="13985154908" role="" />
+      <member type="node" ref="13985154909" role="" />
+      <member type="node" ref="13985154910" role="" />
+      <member type="node" ref="13985154911" role="" />
+      <member type="node" ref="13985154912" role="" />
+      <member type="node" ref="13985154913" role="" />
+      <member type="node" ref="13985154914" role="" />
+      <member type="node" ref="13985154915" role="" />
+      <member type="node" ref="13985154916" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Sector 3 Boulder 1" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419907" version="1">
+      <member type="way" ref="1327302074" role="" />
+      <member type="node" ref="12279289920" role="" />
+      <member type="node" ref="13985154917" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Sector 3 Boulder 2" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419908" version="1">
+      <member type="way" ref="1327302075" role="" />
+      <member type="node" ref="13985154918" role="" />
+      <member type="node" ref="13985154919" role="" />
+      <member type="node" ref="13985154920" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Sector 3 Boulder 3" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419909" version="1">
+      <member type="way" ref="1499827434" role="" />
+      <member type="node" ref="13734148856" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419910" version="1">
+      <member type="way" ref="1532729078" role="" />
+      <member type="node" ref="13968390880" role="" />
+      <member type="node" ref="13968390881" role="" />
+      <member type="node" ref="13968390891" role="" />
+      <member type="node" ref="13968390892" role="" />
+      <member type="node" ref="13968390893" role="" />
+      <member type="node" ref="14158596310" role="" />
+      <member type="node" ref="14158596311" role="" />
+      <member type="node" ref="14158596312" role="" />
+      <member type="node" ref="14158596313" role="" />
+      <member type="node" ref="14158596314" role="" />
+      <member type="node" ref="14158596315" role="" />
+      <member type="node" ref="14158596316" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Suworow" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419911" version="1">
+      <member type="way" ref="1532729080" role="" />
+      <member type="node" ref="14158596317" role="" />
+      <member type="node" ref="14158596318" role="" />
+      <member type="node" ref="14158596319" role="" />
+      <member type="node" ref="14158596320" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Belfagor" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419912" version="1">
+      <member type="way" ref="1533063724" role="" />
+      <member type="node" ref="13970911572" role="" />
+      <member type="node" ref="13970911573" role="" />
+      <member type="node" ref="13971117351" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419913" version="1">
+      <member type="way" ref="1533323083" role="" />
+      <member type="node" ref="13972977540" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419914" version="1">
+      <member type="way" ref="1533323084" role="" />
+      <member type="node" ref="13973127242" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419915" version="1">
+      <member type="way" ref="1533323085" role="" />
+      <member type="node" ref="13978064822" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419916" version="1">
+      <member type="way" ref="1533323088" role="" />
+      <member type="node" ref="14158596324" role="" />
+      <member type="node" ref="14158596325" role="" />
+      <member type="node" ref="14158596326" role="" />
+      <member type="node" ref="14158596327" role="" />
+      <member type="node" ref="14158596328" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419917" version="1">
+      <member type="way" ref="1533323090" role="" />
+      <member type="node" ref="14201076723" role="" />
+      <member type="node" ref="14201315834" role="" />
+      <member type="node" ref="14201315835" role="" />
+      <member type="node" ref="14201315836" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419918" version="1">
+      <member type="way" ref="1533323092" role="" />
+      <member type="node" ref="14201349749" role="" />
+      <member type="node" ref="14201349750" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419919" version="1">
+      <member type="way" ref="1533338357" role="" />
+      <member type="node" ref="13972977537" role="" />
+      <member type="node" ref="13973103528" role="" />
+      <member type="node" ref="13973103529" role="" />
+      <member type="node" ref="13973103530" role="" />
+      <member type="node" ref="13973103531" role="" />
+      <member type="node" ref="13973103532" role="" />
+      <member type="node" ref="13973103533" role="" />
+      <member type="node" ref="13973103534" role="" />
+      <member type="node" ref="13973103535" role="" />
+      <member type="node" ref="13973103536" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419920" version="1">
+      <member type="way" ref="1533955015" role="" />
+      <member type="node" ref="13978064828" role="" />
+      <member type="node" ref="14156106385" role="" />
+      <member type="node" ref="14156106386" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419921" version="1">
+      <member type="way" ref="1534075560" role="" />
+      <member type="node" ref="13978961523" role="" />
+      <member type="node" ref="13978961524" role="" />
+      <member type="node" ref="13978961525" role="" />
+      <member type="node" ref="13978961526" role="" />
+      <member type="node" ref="13979019832" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419922" version="1">
+      <member type="way" ref="1534083850" role="" />
+      <member type="node" ref="13979019810" role="" />
+      <member type="node" ref="13979019811" role="" />
+      <member type="node" ref="13979019812" role="" />
+      <member type="node" ref="13979019813" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Sector 10 Boulder 1" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419923" version="1">
+      <member type="way" ref="1534083851" role="" />
+      <member type="node" ref="13979019819" role="" />
+      <member type="node" ref="13979019820" role="" />
+      <member type="node" ref="13979019821" role="" />
+      <member type="node" ref="13979019822" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Sector 10 Boulder 2" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419924" version="1">
+      <member type="way" ref="1534083852" role="" />
+      <member type="node" ref="13979019856" role="" />
+      <member type="node" ref="13979019857" role="" />
+      <member type="node" ref="13979019858" role="" />
+      <member type="node" ref="13979019859" role="" />
+      <member type="node" ref="13979019860" role="" />
+      <member type="node" ref="13979019861" role="" />
+      <member type="node" ref="13979019862" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419925" version="1">
+      <member type="way" ref="1534083853" role="" />
+      <member type="node" ref="13979019863" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419926" version="1">
+      <member type="way" ref="1534083854" role="" />
+      <member type="node" ref="13979019833" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419927" version="1">
+      <member type="way" ref="1534083855" role="" />
+      <member type="node" ref="13979019834" role="" />
+      <member type="node" ref="13979019835" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419928" version="1">
+      <member type="way" ref="1534083856" role="" />
+      <member type="node" ref="13979019836" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419929" version="1">
+      <member type="way" ref="1534083857" role="" />
+      <member type="node" ref="13979019837" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419930" version="1">
+      <member type="way" ref="1534083858" role="" />
+      <member type="node" ref="13979019838" role="" />
+      <member type="node" ref="13979019839" role="" />
+      <member type="node" ref="13979019840" role="" />
+      <member type="node" ref="13979019841" role="" />
+      <member type="node" ref="13979019842" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419931" version="1">
+      <member type="way" ref="1534916479" role="" />
+      <member type="node" ref="13985756498" role="" />
+      <member type="node" ref="13985801237" role="" />
+      <member type="node" ref="13985801238" role="" />
+      <member type="node" ref="13985801239" role="" />
+      <member type="node" ref="13985801240" role="" />
+      <member type="node" ref="13985801241" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Sector 7 Boulder 8" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419932" version="1">
+      <member type="way" ref="1534916480" role="" />
+      <member type="node" ref="13985801209" role="" />
+      <member type="node" ref="13985801217" role="" />
+      <member type="node" ref="13985801248" role="" />
+      <member type="node" ref="13985801249" role="" />
+      <member type="node" ref="13985801250" role="" />
+      <member type="node" ref="13985801251" role="" />
+      <member type="node" ref="13985801252" role="" />
+      <member type="node" ref="13985801253" role="" />
+      <member type="node" ref="13985801254" role="" />
+      <member type="node" ref="13985801255" role="" />
+      <member type="node" ref="13985801256" role="" />
+      <member type="node" ref="13985801257" role="" />
+      <member type="node" ref="13985801258" role="" />
+      <member type="node" ref="13985801259" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Sector 7 Boulder 7" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419933" version="1">
+      <member type="way" ref="1534916481" role="" />
+      <member type="node" ref="13985801220" role="" />
+      <member type="node" ref="13985801242" role="" />
+      <member type="node" ref="13985801243" role="" />
+      <member type="node" ref="13985801244" role="" />
+      <member type="node" ref="13985801245" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Sector 7 Boulder 9" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419934" version="1">
+      <member type="way" ref="1534916482" role="" />
+      <member type="node" ref="13985801246" role="" />
+      <member type="node" ref="13985801247" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Sector 7 Boulder 10" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419935" version="1">
+      <member type="way" ref="1540361201" role="" />
+      <member type="node" ref="14025156218" role="" />
+      <member type="node" ref="14158558323" role="" />
+      <member type="node" ref="14158558324" role="" />
+      <member type="node" ref="14158558325" role="" />
+      <member type="node" ref="14158558326" role="" />
+      <member type="node" ref="14158558327" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Consiglio in Carrozza" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419936" version="1">
+      <member type="way" ref="1552114166" role="" />
+      <member type="node" ref="14120587694" role="" />
+      <member type="node" ref="14120587695" role="" />
+      <member type="node" ref="14120587696" role="" />
+      <member type="node" ref="14120587699" role="" />
+      <member type="node" ref="14120587700" role="" />
+      <member type="node" ref="14120651701" role="" />
+      <member type="node" ref="14120651702" role="" />
+      <member type="node" ref="14120651703" role="" />
+      <member type="node" ref="14120651704" role="" />
+      <member type="node" ref="14120651705" role="" />
+      <member type="node" ref="14120651706" role="" />
+      <member type="node" ref="14120651707" role="" />
+      <member type="node" ref="14120651708" role="" />
+      <member type="node" ref="14120651709" role="" />
+      <member type="node" ref="14120651710" role="" />
+      <member type="node" ref="14120651711" role="" />
+      <member type="node" ref="14120651712" role="" />
+      <member type="node" ref="14120651713" role="" />
+      <member type="node" ref="14120651714" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Boulder 2" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419937" version="1">
+      <member type="way" ref="1552115090" role="" />
+      <member type="node" ref="14120637739" role="" />
+      <member type="node" ref="14120637743" role="" />
+      <member type="node" ref="14120637744" role="" />
+      <member type="node" ref="14120637745" role="" />
+      <member type="node" ref="14120637746" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Boulder 5" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419938" version="1">
+      <member type="way" ref="1552118577" role="" />
+      <member type="node" ref="14120701542" role="" />
+      <member type="node" ref="14120701543" role="" />
+      <member type="node" ref="14120701548" role="" />
+      <member type="node" ref="14120701549" role="" />
+      <member type="node" ref="14120701550" role="" />
+      <member type="node" ref="14120701551" role="" />
+      <member type="node" ref="14120701552" role="" />
+      <member type="node" ref="14120701553" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Boulder 9" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419939" version="1">
+      <member type="way" ref="1553994083" role="" />
+      <member type="node" ref="14138363932" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419940" version="1">
+      <member type="way" ref="1556046634" role="" />
+      <member type="node" ref="14153549433" role="" />
+      <member type="node" ref="14153549434" role="" />
+      <member type="node" ref="14153549435" role="" />
+      <member type="node" ref="14153549436" role="" />
+      <member type="node" ref="14153549437" role="" />
+      <member type="node" ref="14153549438" role="" />
+      <member type="node" ref="14153549439" role="" />
+      <member type="node" ref="14153549440" role="" />
+      <member type="node" ref="14153549441" role="" />
+      <member type="node" ref="14153549444" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419941" version="1">
+      <member type="way" ref="1556046635" role="" />
+      <member type="node" ref="14153549450" role="" />
+      <member type="node" ref="14153549451" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419942" version="1">
+      <member type="way" ref="1556433943" role="" />
+      <member type="node" ref="14156133346" role="" />
+      <member type="node" ref="14156133347" role="" />
+      <member type="node" ref="14156133348" role="" />
+      <member type="node" ref="14156133349" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419943" version="1">
+      <member type="way" ref="1556437205" role="" />
+      <member type="node" ref="14156133351" role="" />
+      <member type="node" ref="14156133355" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419944" version="1">
+      <member type="way" ref="1556437206" role="" />
+      <member type="node" ref="14156133356" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419945" version="1">
+      <member type="way" ref="1557807395" role="" />
+      <member type="node" ref="13744495221" role="" />
+      <tag k="climbing" v="crag" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21057007" version="5">
+      <member type="node" ref="13979019855" role="" />
+      <member type="relation" ref="21419930" role="" />
+      <member type="relation" ref="21419897" role="" />
+      <member type="relation" ref="21419898" role="" />
+      <member type="relation" ref="21419899" role="" />
+      <member type="relation" ref="21419900" role="" />
+      <member type="relation" ref="21419901" role="" />
+      <member type="relation" ref="21419902" role="" />
+      <member type="relation" ref="21419903" role="" />
+      <member type="relation" ref="21419904" role="" />
+      <member type="relation" ref="21419905" role="" />
+      <member type="relation" ref="21419921" role="" />
+      <member type="relation" ref="21419922" role="" />
+      <member type="relation" ref="21419923" role="" />
+      <member type="relation" ref="21419924" role="" />
+      <member type="relation" ref="21419925" role="" />
+      <member type="relation" ref="21419926" role="" />
+      <member type="relation" ref="21419927" role="" />
+      <member type="relation" ref="21419928" role="" />
+      <member type="relation" ref="21419929" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Paese" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21060002" version="6">
+      <member type="relation" ref="21419908" role="" />
+      <member type="relation" ref="21419906" role="" />
+      <member type="relation" ref="21419907" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Doctor Med Dent" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21358471" version="3">
+      <member type="relation" ref="21419941" role="" />
+      <member type="relation" ref="21419940" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Border Line" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21360262" version="3">
+      <member type="relation" ref="21419944" role="" />
+      <member type="relation" ref="21419920" role="" />
+      <member type="relation" ref="21419942" role="" />
+      <member type="relation" ref="21419943" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="River" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21363583" version="3">
+      <member type="relation" ref="21419935" role="" />
+      <member type="relation" ref="21419910" role="" />
+      <member type="relation" ref="21419911" role="" />
+      <member type="relation" ref="21419913" role="" />
+      <member type="relation" ref="21419914" role="" />
+      <member type="relation" ref="21419915" role="" />
+      <member type="relation" ref="21419916" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Suworrow" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21363584" version="2">
+      <member type="relation" ref="21419919" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Ecstasy" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21376651" version="2">
+      <member type="relation" ref="21419939" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="See" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21376652" version="2">
+      <member type="relation" ref="21419909" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Steinbrächer" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21376653" version="2">
+      <member type="relation" ref="21419945" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Serpentine" />
+      <tag k="site" v="climbing" />
+      <tag k="sport" v="climbing" />
+      <tag k="type" v="site" />
+    </relation>
+    <relation id="21419520" version="5">
+      <member type="relation" ref="21419918" role="" />
+      <member type="relation" ref="21419917" role="" />
+      <tag k="climbing" v="area" />
+      <tag k="climbing:boulder" v="yes" />
+      <tag k="name" v="Schöllenen" />
+      <tag k="type" v="site" />
+    </relation>
+  </modify>
+</osmChange>

@@ -1,24 +1,49 @@
 import type { StyleSpecification } from 'maplibre-gl'
-import { BASEMAP_TILES, CLIMBING_PMTILES_URL, SATELLITE_TILES } from './config'
+import { BASEMAP_GLYPHS, BASEMAP_SOURCE_URL, CLIMBING_PMTILES_URL, SATELLITE_TILES } from './config'
 import { routeGradeColorExpression, UNKNOWN_GRADE_COLOR } from './grades'
 
 const BASEMAP = 'basemap'
 const SATELLITE = 'satellite'
 const CLIMBING = 'climbing'
 
+// OpenFreeMap basemap, styled lightly so the climbing overlay stands out. Every
+// id starts with `basemap-` so the editor can toggle the whole group against the
+// satellite raster. Layers follow the OpenMapTiles vector schema.
+const BASEMAP_LAYERS: any[] = [
+  { id: 'basemap-background', type: 'background', paint: { 'background-color': '#f5f2ec' } },
+  { id: 'basemap-landcover-wood', type: 'fill', source: BASEMAP, 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'wood'], paint: { 'fill-color': '#cfe0c2', 'fill-opacity': 0.7 } },
+  { id: 'basemap-landcover-grass', type: 'fill', source: BASEMAP, 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'grass'], paint: { 'fill-color': '#dcebcd', 'fill-opacity': 0.6 } },
+  { id: 'basemap-landcover-farmland', type: 'fill', source: BASEMAP, 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'farmland'], paint: { 'fill-color': '#eef0d5', 'fill-opacity': 0.6 } },
+  { id: 'basemap-landcover-sand', type: 'fill', source: BASEMAP, 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'sand'], paint: { 'fill-color': '#f2eccb', 'fill-opacity': 0.6 } },
+  { id: 'basemap-landcover-rock', type: 'fill', source: BASEMAP, 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'rock'], paint: { 'fill-color': '#e7e2da', 'fill-opacity': 0.6 } },
+  { id: 'basemap-landcover-ice', type: 'fill', source: BASEMAP, 'source-layer': 'landcover', filter: ['==', ['get', 'class'], 'ice'], paint: { 'fill-color': '#eef5f9', 'fill-opacity': 0.85 } },
+  { id: 'basemap-park', type: 'fill', source: BASEMAP, 'source-layer': 'park', paint: { 'fill-color': '#d5e7c4', 'fill-opacity': 0.45 } },
+  { id: 'basemap-water', type: 'fill', source: BASEMAP, 'source-layer': 'water', filter: ['!=', ['get', 'brunnel'], 'tunnel'], paint: { 'fill-color': '#b7d3e6' } },
+  { id: 'basemap-waterway', type: 'line', source: BASEMAP, 'source-layer': 'waterway', minzoom: 8, paint: { 'line-color': '#b7d3e6', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.5, 16, 3] } },
+  { id: 'basemap-boundary', type: 'line', source: BASEMAP, 'source-layer': 'boundary', minzoom: 1, filter: ['<=', ['get', 'admin_level'], 4], paint: { 'line-color': '#a9a29a', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.5, 10, 1.5], 'line-dasharray': [3, 2] } },
+  { id: 'basemap-road-casing', type: 'line', source: BASEMAP, 'source-layer': 'transportation', minzoom: 12, filter: ['all', ['match', ['get', 'brunnel'], ['bridge', 'tunnel'], false, true], ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor'], true, false]], paint: { 'line-color': '#d8d3cb', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 16, 7, 19, 14] } },
+  { id: 'basemap-road', type: 'line', source: BASEMAP, 'source-layer': 'transportation', minzoom: 5, filter: ['all', ['match', ['get', 'brunnel'], ['bridge', 'tunnel'], false, true], ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service'], true, false]], paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#f3b562', 'trunk', '#f3b562', 'primary', '#f6cc85', 'secondary', '#ffffff', 'tertiary', '#ffffff', 'minor', '#ffffff', 'service', '#f0ede8', '#ffffff'], 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.4, 10, 1.2, 14, 3, 18, 8] } },
+  { id: 'basemap-path', type: 'line', source: BASEMAP, 'source-layer': 'transportation', minzoom: 12, filter: ['match', ['get', 'class'], ['path', 'track', 'pedestrian'], true, false], paint: { 'line-color': '#b48a5a', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.6, 16, 2, 19, 4], 'line-dasharray': [2, 1.5] } },
+  { id: 'basemap-rail', type: 'line', source: BASEMAP, 'source-layer': 'transportation', minzoom: 8, filter: ['==', ['get', 'class'], 'rail'], paint: { 'line-color': '#c7c2bb', 'line-width': 1, 'line-dasharray': [3, 2] } },
+  { id: 'basemap-building', type: 'fill', source: BASEMAP, 'source-layer': 'building', minzoom: 13, paint: { 'fill-color': '#e5e0d8', 'fill-opacity': 0.7 } },
+  { id: 'basemap-label-country', type: 'symbol', source: BASEMAP, 'source-layer': 'place', minzoom: 2, filter: ['==', ['get', 'class'], 'country'], layout: { 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']], 'text-font': ['Noto Sans Bold'], 'text-size': ['interpolate', ['linear'], ['zoom'], 2, 10, 6, 15], 'text-transform': 'uppercase', 'text-letter-spacing': 0.1 }, paint: { 'text-color': '#6b6b6b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } },
+  { id: 'basemap-label-state', type: 'symbol', source: BASEMAP, 'source-layer': 'place', minzoom: 4, filter: ['==', ['get', 'class'], 'state'], layout: { 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']], 'text-font': ['Noto Sans Italic'], 'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 8, 13] }, paint: { 'text-color': '#6b6b6b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } },
+  { id: 'basemap-label-city', type: 'symbol', source: BASEMAP, 'source-layer': 'place', minzoom: 3, filter: ['match', ['get', 'class'], ['city', 'town'], true, false], layout: { 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']], 'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 3, 11, 8, 14, 12, 18] }, paint: { 'text-color': '#333333', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } },
+  { id: 'basemap-label-village', type: 'symbol', source: BASEMAP, 'source-layer': 'place', minzoom: 8, filter: ['==', ['get', 'class'], 'village'], layout: { 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']], 'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 8, 11, 12, 14] }, paint: { 'text-color': '#444444', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } },
+  { id: 'basemap-water-name', type: 'symbol', source: BASEMAP, 'source-layer': 'water_name', minzoom: 8, layout: { 'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']], 'text-font': ['Noto Sans Italic'], 'text-size': ['interpolate', ['linear'], ['zoom'], 8, 11, 14, 14] }, paint: { 'text-color': '#5b7c95', 'text-halo-color': '#eaf2f8', 'text-halo-width': 1 } },
+  { id: 'basemap-peak', type: 'symbol', source: BASEMAP, 'source-layer': 'mountain_peak', minzoom: 9, layout: { 'text-field': ['concat', ['coalesce', ['get', 'name'], ''], ['case', ['has', 'ele'], ['concat', '\n', ['to-string', ['get', 'ele']], ' m'], '']], 'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 9, 10, 14, 13], 'text-anchor': 'top', 'text-offset': [0, 0.4], 'text-max-width': 9 }, paint: { 'text-color': '#6b5b4b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } }
+]
+
 export function buildStyle(): StyleSpecification {
   return {
     version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    glyphs: BASEMAP_GLYPHS,
     sources: {
       [BASEMAP]: {
-        type: 'raster',
-        tiles: [BASEMAP_TILES],
-        tileSize: 256,
+        type: 'vector',
+        url: BASEMAP_SOURCE_URL,
         attribution:
-          '<a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap</a> contributors',
-        minzoom: 0,
-        maxzoom: 19
+          '<a href="https://openfreemap.org/" target="_blank">OpenFreeMap</a> · <a href="https://openmaptiles.org/" target="_blank">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap</a> contributors'
       },
       [SATELLITE]: {
         type: 'raster',
@@ -36,8 +61,8 @@ export function buildStyle(): StyleSpecification {
       }
     },
     layers: [
-      // ─── basemap (raster) ──────────────────────────────────────────
-      { id: 'basemap-raster', type: 'raster', source: BASEMAP, minzoom: 0, maxzoom: 22 },
+      // ─── basemap (OpenFreeMap vector) ────────────────────
+      ...BASEMAP_LAYERS,
       {
         id: 'satellite-raster',
         type: 'raster',

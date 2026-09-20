@@ -51,8 +51,9 @@ npm run dev        # http://localhost:5173
 2. The script also runs **`scripts/extract-sectors.py`** (site area/sector centroids → `data/sectors.geojson`) and **`scripts/extract-search-index.py`** (a compact worldwide name index → `tiles/climbing-search.json`).
 3. Planetiler processes the filtered PBF + site GeoJSON with `scripts/schema.yml` (`areas`, `sectors`, `boulders`, `boulder_points`, and `routes` layers) and writes `tiles/climbing.pmtiles`.
 4. The frontend loads **two vector sources**:
-   - `basemap` — `https://tiles.openfreemap.org/planet/{z}/{x}/{y}.mvt` (OpenFreeMap CDN, free)
+   - `basemap` — OpenFreeMap vector tiles, resolved through its TileJSON (`https://tiles.openfreemap.org/planet`); free, keyless, no usage limits
    - `climbing` — `pmtiles://…/tiles/climbing.pmtiles` (local static file)
+   The basemap style is built in `src/style.ts` (light OpenMapTiles layers prefixed `basemap-`); the editor can switch the whole group off in favour of an Esri satellite raster.
 5. MapLibre progressively reveals the hierarchy: area names below z13, sector names from z13 to z16, boulder names from z16 to z19, and problem names from z19. Physical boulders and grade-colored problem dots also appear at z13.
 6. Selecting a sector fetches its direct relation members from the live OSM API and shows its problems with grades. Selecting a problem flies the map to it at z19.
 

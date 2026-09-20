@@ -9,12 +9,11 @@ export const INITIAL_VIEW = {
   maxZoom: 22
 }
 
-// Basemap tiles. Currently using OpenStreetMap raster tiles (free, no API key).
-// For vector basemap when OpenFreeMap is back:
-//   https://tiles.openfreemap.org/planet/{z}/{x}/{y}.mvt
-// Or for a richer outdoor vector basemap (free tier, needs signup):
-//   https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=YOUR_KEY
-export const BASEMAP_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+// Basemap: OpenFreeMap vector tiles (free, no API key, no usage limits). The
+// TileJSON URL is used so MapLibre resolves the current versioned tile path.
+// https://openfreemap.org/
+export const BASEMAP_SOURCE_URL = 'https://tiles.openfreemap.org/planet'
+export const BASEMAP_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf'
 
 // Aerial imagery is offered as an editing aid. It is intentionally not the
 // default map: editors opt into it when tracing or checking rock geometry.

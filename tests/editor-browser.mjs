@@ -29,6 +29,13 @@ try {
   // Keep the tests independent of external raster/glyph services.
   await page.route('https://tile.openstreetmap.org/**', r => r.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') }))
   await page.route('https://demotiles.maplibre.org/**', r => r.fulfill({ contentType: 'application/x-protobuf', body: Buffer.alloc(0) }))
+  await page.route('https://tiles.openfreemap.org/**', route => {
+    const { pathname } = new URL(route.request().url())
+    if (pathname === '/planet') return route.fulfill({ json: { tilejson: '3.0.0', tiles: ['https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf'], minzoom: 0, maxzoom: 14, vector_layers: [] } })
+    if (pathname.endsWith('.json')) return route.fulfill({ json: {} })
+    if (pathname.endsWith('.png')) return route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') })
+    return route.fulfill({ contentType: 'application/x-protobuf', body: Buffer.alloc(0) })
+  })
   await page.route('https://overpass-api.de/api/interpreter', r => { overpassRequests++; return r.fulfill({ json: { elements: [] } }) })
   page.on('request', request => {
     const path = new URL(request.url()).pathname

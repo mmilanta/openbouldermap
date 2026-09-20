@@ -61,7 +61,11 @@ function saveDraft(): void {
 graph.onChange = () => { editingMap?.render(); syncToolbar(); saveDraft() }
 
 function setEditorBackground(map: LibreMap, background: EditorBackground): void {
-  if (map.getLayer('basemap-raster')) map.setLayoutProperty('basemap-raster', 'visibility', background === 'map' ? 'visible' : 'none')
+  // The OpenFreeMap basemap is a group of vector layers; toggle them together.
+  for (const layer of map.getStyle().layers) {
+    if (!layer.id.startsWith('basemap-')) continue
+    map.setLayoutProperty(layer.id, 'visibility', background === 'map' ? 'visible' : 'none')
+  }
   if (map.getLayer('satellite-raster')) map.setLayoutProperty('satellite-raster', 'visibility', background === 'satellite' ? 'visible' : 'none')
   const satelliteAttribution = document.getElementById('satellite-attribution')
   if (satelliteAttribution) satelliteAttribution.hidden = background !== 'satellite'

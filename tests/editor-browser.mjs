@@ -61,6 +61,12 @@ try {
   await page.getByRole('heading', { name: 'Edit boulder', exact: true }).click()
   assert.equal((await features()).filter(f => f.properties.kind === 'boulder').length, 1)
 
+  // Cursor affordances: index finger over nodes, drag hand elsewhere.
+  await page.mouse.move(350, 300)
+  await page.waitForFunction(() => window.__map.getCanvas().style.cursor === 'pointer')
+  await page.mouse.move(600, 250)
+  await page.waitForFunction(() => window.__map.getCanvas().style.cursor === 'grab')
+
   await clickTool('+ Route'); await page.mouse.click(350, 375)
   await page.getByRole('heading', { name: 'Edit route', exact: true }).waitFor()
   await page.getByRole('button', { name: 'Attached to Browser test rock', exact: true }).waitFor()

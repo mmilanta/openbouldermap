@@ -67,6 +67,8 @@ setSectorNavigator((lon, lat) => {
 })
 
 map.on('load', () => {
+  // Edit mode owns its cursor: a hand for panning, index finger over nodes.
+  if (isEditMode()) return
   // Cursor: pointer over clickable layers.
   const interactiveLayers = [
     'route-hit', 'route',

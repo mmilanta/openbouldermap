@@ -19,6 +19,17 @@ interface Hooks {
   canInteract(): boolean
 }
 const empty = (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features: [] })
+// Small, clickable point features that get an index-finger cursor. Polygons
+// (boulders, areas) keep the drag hand: panning is the primary gesture there.
+const POINT_CURSOR_LAYERS = [
+  'edit-vertices', 'edit-routes',
+  'route', 'route-hit',
+  'boulder-point', 'boulder-point-label', 'boulder-label',
+  'sector-label', 'area-label',
+  // Live edit-mode layers, present once the live-data feature is merged.
+  'live-route', 'live-route-hit',
+  'live-boulder-point', 'live-boulder-point-label', 'live-boulder-label', 'live-sector-label'
+]
 export class EditingMap {
   selected?: Key
   vertexSelection?: { way: Key; node: Key }
@@ -32,6 +43,7 @@ export class EditingMap {
   private suppressClick = false
   private baseFilters = new Map<string, any>()
   private filterSignature = ''
+  private panning = false
   // Latest editor features, kept so hit-testing does not depend on MapLibre's
   // asynchronous GeoJSON re-parse (queryRenderedFeatures can lag a change).
   private lastFeatures: GeoJSON.Feature[] = []
@@ -45,6 +57,9 @@ export class EditingMap {
     map.on('mousedown', e => this.down(e))
     map.on('mousemove', e => this.move(e))
     map.on('mouseup', e => this.up(e))
+    // Panning shows the closed hand; the open hand is the select default.
+    map.on('dragstart', () => { this.panning = true; this.applyCursor() })
+    map.on('dragend', () => { this.panning = false; this.applyCursor() })
     map.on('idle', () => { if (this.ready) hooks.loadVisible() })
     window.addEventListener('mouseup', () => { if (this.drag) this.cancelDrag() })
     window.addEventListener('blur', () => this.cancelDrag())
@@ -64,12 +79,12 @@ export class EditingMap {
     m.addLayer({ id: 'edit-vertices', type: 'circle', source: 'edit-handles', paint: { 'circle-radius': ['case', ['==', ['get', 'handle'], 'midpoint'], 4, 6], 'circle-color': ['case', ['get', 'route'], '#f2a23a', '#fff'], 'circle-stroke-color': ['case', ['get', 'selected'], '#e02929', '#194f7a'], 'circle-stroke-width': 2 } })
     m.addLayer({ id: 'edit-sketch-line', type: 'line', source: 'edit-sketch', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#d36b00', 'line-width': 3, 'line-dasharray': [2, 1] } })
     m.addLayer({ id: 'edit-sketch-points', type: 'circle', source: 'edit-sketch', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': '#ffbb44', 'circle-stroke-width': 2, 'circle-stroke-color': '#111' } })
-    this.ready = true; this.render(); this.hooks.loadVisible()
+    this.ready = true; this.render(); this.applyCursor(); this.hooks.loadVisible()
   }
   setTool(tool: EditingMap['tool']): void {
     this.hooks.dismissContext()
     this.cancelDrag(); this.tool = tool; this.drawing = []
-    this.map.getCanvas().style.cursor = tool === 'select' ? '' : 'crosshair'
+    this.applyCursor()
     this.hooks.message(tool === 'route' ? 'Click to place a route. Hold Alt to avoid snapping.' : tool === 'boulder' ? 'Click perimeter corners, then click the first or last corner again to close. Enter also finishes; Escape cancels; Backspace removes the last corner.' : tool === 'move-boulder' ? 'Drag the selected boulder to move it and all attached routes.' : 'Select a route or boulder. Drag selected vertices; click small midpoint handles to add a vertex.')
     this.render()
   }
@@ -178,6 +193,17 @@ export class EditingMap {
     return result
   }
   private hits(e: MapMouseEvent, layers: string[]): MapGeoJSONFeature[] { return this.ready ? this.map.queryRenderedFeatures(e.point, { layers }) : [] }
+  /** Hand cursor while panning, index finger over editable point features. */
+  private applyCursor(e?: MapMouseEvent): void {
+    if (!this.ready) return
+    const canvas = this.map.getCanvas()
+    if (!this.hooks.canInteract()) { canvas.style.cursor = ''; return }
+    if (this.tool === 'route' || this.tool === 'boulder') { canvas.style.cursor = 'crosshair'; return }
+    if (this.panning || this.drag) { canvas.style.cursor = 'grabbing'; return }
+    const layers = POINT_CURSOR_LAYERS.filter(id => this.map.getLayer(id))
+    const overNode = e !== undefined && layers.length > 0 && this.map.queryRenderedFeatures(e.point, { layers }).length > 0
+    canvas.style.cursor = overNode ? 'pointer' : 'grab'
+  }
   private context(e: MapMouseEvent): void {
     e.preventDefault(); e.originalEvent.preventDefault()
     this.hooks.dismissContext()
@@ -276,9 +302,11 @@ export class EditingMap {
       }
     }
     this.drag = { key, whole, start, current: start, moved: false, detachedOrigin }
+    this.applyCursor(e)
   }
   private move(e: MapMouseEvent): void {
     if (!this.ready) return
+    this.applyCursor(e)
     const p: Position = [e.lngLat.lng, e.lngLat.lat]
     if (!this.hooks.canInteract()) return
     if (this.tool === 'route') { this.snap = e.originalEvent.altKey ? undefined : this.snapAt(p); this.render(); return }
@@ -296,7 +324,7 @@ export class EditingMap {
     }
     this.render()
   }
-  private async up(_e: MapMouseEvent): Promise<void> {
+  private async up(e: MapMouseEvent): Promise<void> {
     const d = this.drag, snap = this.snap
     if (!d) return
     if (!d.moved) { this.cancelDrag(); return }
@@ -315,11 +343,12 @@ export class EditingMap {
     } finally {
       this.committingDrag = false
       this.preview.clear(); this.snap = undefined
+      this.applyCursor(e)
       this.render() // Commit coordinates, or restore the original geometry on failure.
     }
   }
   private cancelDrag(): void {
     if (this.committingDrag) return
-    this.drag = undefined; this.preview.clear(); this.snap = undefined; this.map.dragPan.enable(); this.render()
+    this.drag = undefined; this.preview.clear(); this.snap = undefined; this.map.dragPan.enable(); this.render(); this.applyCursor()
   }
 }

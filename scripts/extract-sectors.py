@@ -7,7 +7,8 @@ Planetiler can't turn these node-membered site relations into polygons, so this
 script emits a centroid point for each area and sector.
 
 Input : OPL text on stdin (produced by `osmium cat -f opl data/climbing-filtered.osm.pbf`)
-Output: data/sectors.geojson (GeoJSON FeatureCollection of Points)
+Output: data/sectors.geojson (GeoJSON FeatureCollection of Points), or the path
+given as the first argument.
 
 Run from the repo root:
   osmium cat -f opl data/climbing-filtered.osm.pbf | python3 scripts/extract-sectors.py
@@ -76,6 +77,7 @@ def parse_members(member_str: str) -> list[tuple[str, int]]:
 
 
 def main() -> None:
+    out_path = Path(sys.argv[1]) if len(sys.argv) > 1 else OUT
     node_coords: dict[int, tuple[float, float]] = {}
     way_nodes: dict[int, list[int]] = {}
     # Bouldering site relations: id -> (name, climbing value, members).
@@ -128,9 +130,12 @@ def main() -> None:
                 tags_str, member_str = tags_part, ""
             tags = parse_tags(tags_str)
             climbing = tags.get("climbing")
+            # A bouldering site relation does not have to carry `site=climbing`
+            # (Schöllenen, Röthis, …). The climbing tags already identify it, and
+            # requiring the extra tag made the precomputed area->sectors list
+            # disagree with the live OSM API query.
             if (
                 tags.get("type") == "site"
-                and tags.get("site") == "climbing"
                 and tags.get("climbing:boulder") == "yes"
                 and climbing in {"area", "crag"}
                 and tags.get("name")
@@ -222,12 +227,12 @@ def main() -> None:
             "properties": properties,
         })
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    with OUT.open("w") as f:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w") as f:
         json.dump({"type": "FeatureCollection", "features": features}, f)
     area_count = sum(f["properties"]["kind"] == "area" for f in features)
     sector_count = len(features) - area_count
-    print(f"wrote {area_count} area and {sector_count} sector points to {OUT}")
+    print(f"wrote {area_count} area and {sector_count} sector points to {out_path}")
 
 
 if __name__ == "__main__":

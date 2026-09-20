@@ -189,7 +189,7 @@ def main() -> None:
     site_ids = {
         oid
         for oid, (_name, tags) in rel_candidates.items()
-        if tags.get("type") == "site" and tags.get("site") == "climbing"
+        if tags.get("type") == "site"
     }
     child_site_ids = {
         member_id

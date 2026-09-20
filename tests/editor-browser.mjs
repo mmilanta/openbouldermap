@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 
-const base = process.env.EDITOR_TEST_URL || 'http://127.0.0.1:5199/openbouldermap/'
+const base = process.env.EDITOR_TEST_URL || 'http://127.0.0.1:5199/'
 const server = process.env.EDITOR_TEST_URL ? undefined : spawn('node', ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5199', '--strictPort'], { stdio: 'pipe' })
 const errors = [], alerts = []
 let dismissNextConfirmation = false

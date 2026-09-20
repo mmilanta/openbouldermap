@@ -5,10 +5,10 @@
     <title>OpenBoulderMap</title>
     <script>
       // GitHub Pages has no SPA fallback, so a direct visit to
-      // /openbouldermap/edit would otherwise return 404. This page redirects
-      // the missing /edit route to the app while preserving the map hash.
+      // /edit would otherwise return 404. This page redirects the missing
+      // /edit route to the app while preserving the map hash.
       (function () {
-        var base = '/openbouldermap/'
+        var base = '/'
         var root = base.replace(/\/+$/, '')
         var path = window.location.pathname.replace(/\/+$/, '')
         var hash = window.location.hash || ''

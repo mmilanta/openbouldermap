@@ -6,7 +6,7 @@ export const INITIAL_VIEW = {
   center: [8.22, 46.82] as [number, number],
   zoom: 3,
   minZoom: 1,
-  maxZoom: 20
+  maxZoom: 22
 }
 
 // Basemap tiles. Currently using OpenStreetMap raster tiles (free, no API key).

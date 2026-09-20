@@ -178,7 +178,9 @@ try {
   await page.locator('#edit-toggle').click()
   await page.waitForURL(url => url.pathname === new URL(base).pathname)
   assert.equal(await page.evaluate(() => localStorage.getItem('openbouldermap.editor.v1')), null)
-  await page.locator('#edit-toggle').click()
+  // The viewer has no edit entry button: the editor is reachable only by URL.
+  assert.equal(await page.locator('#edit-toggle').isVisible(), false)
+  await page.goto(`${base}edit#19/0/0`)
   await page.waitForFunction(() => window.__map?.getLayer('edit-vertices'))
 
   // Clicking the last vertex again also finishes, without duplicating it.

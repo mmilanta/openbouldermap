@@ -68,6 +68,9 @@ export function initEditorButton(map: LibreMap): void {
   toggle.title = editing ? 'Discard local changes and leave edit mode' : 'Edit OpenStreetMap features'
   toggle.setAttribute('aria-label', toggle.title)
   toggle.classList.toggle('editing', editing)
+  // The edit entry button only belongs on the editor page; the viewer is
+  // reachable strictly by navigating to /edit (or the GitHub Pages redirect).
+  toggle.hidden = !editing
   exportButton.hidden = !editing
   exportButton.title = 'Review local changes and download an OSM changefile'
   toggle.addEventListener('click', async () => {

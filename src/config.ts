@@ -32,6 +32,8 @@ export const EDIT_PATH = `${BASE_URL}edit`
 const origin = typeof location !== 'undefined' ? location.origin : ''
 export const CLIMBING_PMTILES_URL = `pmtiles://${origin}${BASE_URL}tiles/climbing.pmtiles`
 export const CLIMBING_METADATA_URL = `${BASE_URL}tiles/climbing-metadata.json`
-// Static viewer search index, generated from the same PBF as the tiles. The
-// viewer fetches it lazily on first search interaction.
-export const CLIMBING_SEARCH_URL = `${BASE_URL}tiles/climbing-search.json`
+// Static hierarchy index (area tree + boulders + problems), generated from the
+// same PBF as the tiles by scripts/build-hierarchy.py. It is the viewer's only
+// data source beyond the tiles: search, area/boulder panels and route details
+// all read from it, so the viewer never calls the live OSM API.
+export const CLIMBING_INDEX_URL = `${BASE_URL}tiles/climbing-index.json`

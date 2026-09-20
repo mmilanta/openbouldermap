@@ -1,6 +1,7 @@
 import type { Map as LibreMap, MapMouseEvent, GeoJSONSource, MapGeoJSONFeature } from 'maplibre-gl'
 import { EditGraph, groupKind, isBoulder, isRoute, keyOf, pointInRing, type Key, type Position, type Element } from './model'
 import { routeGradeColor as gradeColorForTags } from '../grades'
+import { AREA_LABEL_LAYERS } from '../style'
 
 export interface Snap { way: Key; segment: number; position: Position; vertex?: number }
 export interface ContextTarget { key: Key; way?: Key; position: Position; x: number; y: number }
@@ -25,7 +26,7 @@ const POINT_CURSOR_LAYERS = [
   'edit-vertices', 'edit-routes',
   'route', 'route-hit',
   'boulder-point', 'boulder-point-label', 'boulder-label',
-  'sector-label', 'area-label',
+  'sector-label', ...AREA_LABEL_LAYERS,
   // Live edit-mode layers, present once the live-data feature is merged.
   'live-route', 'live-route-hit',
   'live-boulder-point', 'live-boulder-point-label', 'live-boulder-label', 'live-sector-label'
@@ -256,7 +257,7 @@ export class EditingMap {
     }
     const local = this.hits(e, ['edit-area-names', 'edit-sector-names'])[0] ?? this.hits(e, ['edit-routes', 'edit-boulders'])[0]
     if (local) { this.hooks.select(local.properties.key as Key); return }
-    const tile = this.hits(e, ['sector-label', 'area-label'])[0] ?? this.hits(e, ['route', 'route-hit'])[0] ?? this.hits(e, ['boulder', 'boulder-label', 'boulder-point', 'boulder-point-label', 'sector', 'area'])[0]
+    const tile = this.hits(e, ['sector-label', ...AREA_LABEL_LAYERS])[0] ?? this.hits(e, ['route', 'route-hit'])[0] ?? this.hits(e, ['boulder', 'boulder-label', 'boulder-point', 'boulder-point-label', 'sector', 'area'])[0]
     if (tile) {
       const props = tile.properties, type = props.osm_type ?? 'node', id = Number(props.osm_id)
       if (['node', 'way', 'relation'].includes(type) && Number.isFinite(id)) this.hooks.select(`${type}/${id}` as Key)

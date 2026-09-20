@@ -84,18 +84,18 @@ else
 fi
 trap - EXIT
 
-echo "==> Extracting sector points from site relations -> data/sectors.geojson"
-osmium cat -f opl "$FILTERED" | python3 scripts/extract-sectors.py
-
-echo "==> Building worldwide search index -> tiles/climbing-search.json"
-osmium cat -f opl "$FILTERED" | python3 scripts/extract-search-index.py
+echo "==> Building hierarchy index and map layers (areas, sectors, rocks)"
+osmium cat -f opl "$FILTERED" | python3 scripts/build-hierarchy.py \
+  data/sectors.geojson data/boulders.geojson tiles/climbing-index.json
 
 # Planetiler 0.10.2 crashes on an empty FeatureCollection. Add one harmless
-# untagged point; it matches no schema layer and therefore emits no tile feature.
-if ! python3 -c 'import json; raise SystemExit(not json.load(open("data/sectors.geojson"))["features"])'; then
-  echo "==> No sector centroids found; adding a non-rendered GeoJSON placeholder"
-  printf '%s\n' '{"type":"Feature","geometry":{"type":"Point","coordinates":[0,0]},"properties":{}}' > data/sectors.geojson
-fi
+# untagged point; the schema's include_when rules keep it out of every layer.
+for GEOJSON in data/sectors.geojson data/boulders.geojson; do
+  if ! python3 -c "import json; raise SystemExit(not json.load(open('$GEOJSON'))['features'])"; then
+    echo "==> $GEOJSON has no features; adding a non-rendered GeoJSON placeholder"
+    printf '%s\n' '{"type":"Feature","geometry":{"type":"Point","coordinates":[0,0]},"properties":{}}' > "$GEOJSON"
+  fi
+done
 
 echo "==> Running planetiler (climbing-only schema) -> $OUTPUT"
 java -Xmx4g -jar planetiler.jar generate-custom \
@@ -106,8 +106,10 @@ java -Xmx4g -jar planetiler.jar generate-custom \
   --force
 
 # Keep a small, cacheable timestamp beside the archive so the UI can tell
-# visitors exactly when this climbing snapshot was generated.
-printf '{\n  "updated": "%s"\n}\n' "$(date -u +%F)" > tiles/climbing-metadata.json
+# visitors exactly when this climbing snapshot was generated. `maxRank` lets the
+# viewer anchor the area zoom bands to the deepest level actually present.
+MAX_RANK="$(python3 -c 'import json; print(json.load(open("tiles/climbing-index.json"))["maxRank"])')"
+printf '{\n  "updated": "%s",\n  "maxRank": %s\n}\n' "$(date -u +%F)" "$MAX_RANK" > tiles/climbing-metadata.json
 
 echo ""
 echo "==> Done."

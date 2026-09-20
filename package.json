@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:browser": "node tests/search-browser.mjs && node tests/editor-browser.mjs",
-    "build": "vite build && mkdir -p dist/tiles && cp tiles/climbing.pmtiles tiles/climbing-metadata.json tiles/climbing-search.json dist/tiles/",
+    "build": "vite build && mkdir -p dist/tiles && cp tiles/climbing.pmtiles tiles/climbing-metadata.json tiles/climbing-index.json dist/tiles/",
     "preview": "vite preview --port 4173",
     "build-tiles": "bash scripts/build-climbing-tiles.sh",
     "serve-tiles": "npx tsx scripts/serve-tiles.ts 8081"

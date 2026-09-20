@@ -170,12 +170,12 @@ try {
   // Group search includes locally created parents; deleting the area preserves its sector.
   await clickTool('Find sector / area')
   // Remote parent discovery comes from the static index, never Overpass.
-  const searchIndex = await (await fetch(`${base}tiles/climbing-search.json`)).json()
-  const remoteSector = searchIndex.rows.find(row => row[1] === 's' && typeof row[0] === 'string' && row[0].length >= 5)
+  const searchIndex = await (await fetch(`${base}tiles/climbing-index.json`)).json()
+  const remoteSector = searchIndex.sectors.find(row => typeof row[1] === 'string' && row[1].length >= 5)
   const sectorBox = page.getByRole('textbox', { name: 'Search sector by name' })
-  await sectorBox.fill(remoteSector[0])
+  await sectorBox.fill(remoteSector[1])
   await sectorBox.press('Enter')
-  await page.locator('.parent-result button', { hasText: remoteSector[0] }).first().waitFor()
+  await page.locator('.parent-result button', { hasText: remoteSector[1] }).first().waitFor()
   await page.getByRole('textbox', { name: 'Search area by name' }).fill('Test area')
   await page.getByRole('textbox', { name: 'Search area by name' }).press('Enter')
   await page.locator('.parent-results').getByRole('button', { name: /Test area/ }).click()

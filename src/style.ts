@@ -6,6 +6,47 @@ const BASEMAP = 'basemap'
 const SATELLITE = 'satellite'
 const CLIMBING = 'climbing'
 
+// Areas appear as floating names only, one rank per zoom band, so labels of
+// different levels are never visible at the same zoom. Rank is baked into the
+// tiles by scripts/build-hierarchy.py; rank 6+ is a build-time error there.
+const AREA_BAND_COUNT = 6
+
+export const AREA_LABEL_LAYERS: string[] = Array.from(
+  { length: AREA_BAND_COUNT },
+  (_, band) => `area-label-${band}`
+)
+
+// Band 0 is the deepest area level present; higher bands are its ancestors. The
+// root level (band === maxRank) has no ancestor to hand over to, so it stays
+// visible all the way down to z7 instead of only its two-zoom slot.
+function areaLabelLayers(maxRank: number): any[] {
+  return Array.from({ length: AREA_BAND_COUNT }, (_, band) => {
+    const naturalMin = 15 - 2 * band
+    const maxzoom = 17 - 2 * band
+    const minzoom = band === maxRank ? Math.min(7, naturalMin) : naturalMin
+    return {
+      id: `area-label-${band}`,
+      type: 'symbol',
+      source: CLIMBING,
+      'source-layer': 'areas',
+      minzoom,
+      maxzoom,
+      filter: ['==', ['get', 'band'], band],
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': ['Noto Sans Bold'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 10, 15, 14],
+        'text-anchor': 'center'
+      },
+      paint: {
+        'text-color': '#285b33',
+        'text-halo-color': 'rgba(255,255,255,0.9)',
+        'text-halo-width': 2
+      }
+    }
+  })
+}
+
 // OpenFreeMap basemap, styled lightly so the climbing overlay stands out. Every
 // id starts with `basemap-` so the editor can toggle the whole group against the
 // satellite raster. Layers follow the OpenMapTiles vector schema.
@@ -34,7 +75,7 @@ const BASEMAP_LAYERS: any[] = [
   { id: 'basemap-peak', type: 'symbol', source: BASEMAP, 'source-layer': 'mountain_peak', minzoom: 9, layout: { 'text-field': ['concat', ['coalesce', ['get', 'name'], ''], ['case', ['has', 'ele'], ['concat', '\n', ['to-string', ['get', 'ele']], ' m'], '']], 'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 9, 10, 14, 13], 'text-anchor': 'top', 'text-offset': [0, 0.4], 'text-max-width': 9 }, paint: { 'text-color': '#6b5b4b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 } }
 ]
 
-export function buildStyle(): StyleSpecification {
+export function buildStyle(maxRank = 1): StyleSpecification {
   return {
     version: 8,
     glyphs: BASEMAP_GLYPHS,
@@ -107,8 +148,13 @@ export function buildStyle(): StyleSpecification {
         type: 'fill',
         source: CLIMBING,
         'source-layer': 'boulders',
-        minzoom: 13,
-        paint: { 'fill-color': '#4a4a4a', 'fill-opacity': 0.85, 'fill-outline-color': '#2b2b2b' }
+        minzoom: 12,
+        paint: {
+          // Rocks without a boulder relation are dimmed and not clickable.
+          'fill-color': ['case', ['==', ['get', 'sector'], -1], '#9aa5ae', '#4a4a4a'],
+          'fill-opacity': ['case', ['==', ['get', 'sector'], -1], 0.3, 0.85],
+          'fill-outline-color': ['case', ['==', ['get', 'sector'], -1], '#b6bfc7', '#2b2b2b']
+        }
       },
       // ─── boulder points: named boulder markers ─────────────────────
       {
@@ -116,9 +162,9 @@ export function buildStyle(): StyleSpecification {
         type: 'circle',
         source: CLIMBING,
         'source-layer': 'boulder_points',
-        minzoom: 13,
+        minzoom: 12,
         paint: {
-          'circle-color': '#555555',
+          'circle-color': ['case', ['==', ['get', 'sector'], -1], '#aab4bc', '#555555'],
           'circle-radius': 4,
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': 1
@@ -165,73 +211,16 @@ export function buildStyle(): StyleSpecification {
 
       // Boulder names are deliberately above route dots. A physical boulder's
       // label must remain readable even when several problems surround it.
-      {
-        id: 'boulder-label',
-        type: 'symbol',
-        source: CLIMBING,
-        'source-layer': 'boulders',
-        minzoom: 16,
-        maxzoom: 19,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-font': ['Noto Sans Regular'],
-          'text-size': 10,
-          'text-anchor': 'center'
-        },
-        paint: {
-          'text-color': '#1a1a1a',
-          'text-halo-color': 'rgba(255,255,255,0.8)',
-          'text-halo-width': 1.5
-        }
-      },
-      {
-        id: 'boulder-point-label',
-        type: 'symbol',
-        source: CLIMBING,
-        'source-layer': 'boulder_points',
-        minzoom: 16,
-        maxzoom: 19,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-font': ['Noto Sans Regular'],
-          'text-size': 9,
-          'text-anchor': 'left',
-          'text-offset': [0.6, 0]
-        },
-        paint: {
-          'text-color': '#333333',
-          'text-halo-color': 'rgba(255,255,255,0.8)',
-          'text-halo-width': 1.5
-        }
-      },
-
-      // Labels are last so hierarchy names remain readable over markers.
-      {
-        id: 'area-label',
-        type: 'symbol',
-        source: CLIMBING,
-        'source-layer': 'areas',
-        minzoom: 2,
-        maxzoom: 13,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-font': ['Noto Sans Bold'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 2, 10, 8, 14],
-          'text-anchor': 'center'
-        },
-        paint: {
-          'text-color': '#285b33',
-          'text-halo-color': 'rgba(255,255,255,0.9)',
-          'text-halo-width': 2
-        }
-      },
+      // Hierarchy labels are last so names stay readable over markers. Each
+      // rank owns an exclusive zoom band; boulders get the band after rank 5.
+      ...areaLabelLayers(maxRank),
       {
         id: 'sector-label',
         type: 'symbol',
         source: CLIMBING,
         'source-layer': 'sectors',
-        minzoom: 13,
-        maxzoom: 16,
+        minzoom: 17,
+        maxzoom: 19,
         layout: {
           'text-field': ['get', 'name'],
           'text-font': ['Noto Sans Bold'],
@@ -241,6 +230,49 @@ export function buildStyle(): StyleSpecification {
         paint: {
           'text-color': '#2a6090',
           'text-halo-color': 'rgba(255,255,255,0.9)',
+          'text-halo-width': 1.5
+        }
+      },
+      // A rock linked to a boulder takes the boulder's name, so only orphan
+      // rocks carry their own label (drawn in front, dimmed to match the fill).
+      {
+        id: 'boulder-label',
+        type: 'symbol',
+        source: CLIMBING,
+        'source-layer': 'boulders',
+        minzoom: 17,
+        maxzoom: 19,
+        filter: ['==', ['get', 'sector'], -1],
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 10,
+          'text-anchor': 'center'
+        },
+        paint: {
+          'text-color': '#6b7580',
+          'text-halo-color': 'rgba(255,255,255,0.85)',
+          'text-halo-width': 1.5
+        }
+      },
+      {
+        id: 'boulder-point-label',
+        type: 'symbol',
+        source: CLIMBING,
+        'source-layer': 'boulder_points',
+        minzoom: 17,
+        maxzoom: 19,
+        filter: ['==', ['get', 'sector'], -1],
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 9,
+          'text-anchor': 'left',
+          'text-offset': [0.6, 0]
+        },
+        paint: {
+          'text-color': '#6b7580',
+          'text-halo-color': 'rgba(255,255,255,0.85)',
           'text-halo-width': 1.5
         }
       },

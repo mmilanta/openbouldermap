@@ -2,6 +2,10 @@ schema_name: openbouldermap-climbing
 schema_description: 'OpenBoulderMap — climbing features (boulders + routes), derived from OpenStreetMap.'
 attribution: '&copy; OpenStreetMap contributors'
 
+# Three precomputed GeoJSON inputs are produced by scripts/build-hierarchy.py:
+#   data/sectors.geojson — area + sector centroid points, carrying `rank`
+#   data/boulders.geojson — physical rock geometry linked to its sector
+# The raw OSM PBF supplies the problem points.
 sources:
   osm:
     type: osm
@@ -9,6 +13,9 @@ sources:
   sector_sites:
     type: geojson
     local_path: data/sectors.geojson
+  rocks:
+    type: geojson
+    local_path: data/boulders.geojson
 
 tag_mappings:
   'climbing:grade:font': string
@@ -31,59 +38,12 @@ tag_mappings:
 
 layers:
 
-  # ---- boulder polygons: climbing=boulder & natural=bare_rock/stone & sport=climbing ----
-  - id: boulders
-    features:
-      - source: osm
-        geometry: polygon
-        min_zoom: 12
-        include_when:
-          __all__:
-            - climbing: boulder
-            - natural: [bare_rock, stone]
-            - sport: climbing
-        attributes:
-          - { key: name, tag_value: name }
-          - { key: description, tag_value: description }
-          - { key: wikimedia_commons, tag_value: wikimedia_commons }
-          - { key: osm_type, value: '${ feature.osm_type }' }
-          - { key: osm_id, value: '${ feature.id }', type: long }
-
-  # ---- boulder points: climbing=boulder & natural=stone & sport=climbing ----
-  # The 227 named boulder markers in Chironico (e.g. "Sector 6 Boulder 42")
-  - id: boulder_points
-    features:
-      - source: osm
-        geometry: point
-        min_zoom: 13
-        include_when:
-          __all__:
-            - climbing: boulder
-            - natural: stone
-            - sport: climbing
-        attributes:
-          - { key: name, tag_value: name }
-          - { key: osm_type, value: '${ feature.osm_type }' }
-          - { key: osm_id, value: '${ feature.id }', type: long }
-
-  # ---- bouldering areas: climbing=area + climbing:boulder=yes ----
-  # Area relations are emitted as centroid points by extract-sectors.py. Polygon
-  # areas are retained too, allowing broad destinations to appear from z2.
+  # ---- areas: nested bouldering areas, shown as floating names only ----
+  # `band` counts from the deepest area level (0 = deepest) and drives the zoom
+  # band a name may appear in (styled in src/style.ts); the viewer side is
+  # label-only, so these are centroid points.
   - id: areas
     features:
-      - source: osm
-        geometry: polygon
-        min_zoom: 2
-        include_when:
-          __all__:
-            - climbing: area
-            - climbing:boulder: 'yes'
-        attributes:
-          - { key: name, tag_value: name }
-          - { key: description, tag_value: description }
-          - { key: kind, value: area }
-          - { key: osm_type, value: '${ feature.osm_type }' }
-          - { key: osm_id, value: '${ feature.id }', type: long }
       - source: sector_sites
         geometry: point
         min_zoom: 2
@@ -91,48 +51,58 @@ layers:
           climbing: area
         attributes:
           - { key: name, tag_value: name }
-          - { key: climbing, tag_value: climbing }
           - { key: kind, tag_value: kind }
           - { key: osm_type, tag_value: osm_type }
           - { key: osm_id, tag_value: osm_id, type: long }
-          - { key: sectors, tag_value: sectors }
+          - { key: rank, tag_value: rank, type: integer }
+          - { key: band, tag_value: band, type: integer }
+          - { key: area_count, tag_value: area_count, type: integer }
+          - { key: sector_count, tag_value: sector_count, type: integer }
 
-  # ---- bouldering sectors: climbing=crag + climbing:boulder=yes ----
-  # These are the immediate relation parents of boulder problems. Site
-  # relations are represented by centroid points; mapped boundaries stay fills.
+  # ---- sectors: the boulders (climbing=crag + climbing:boulder=yes) ----
   - id: sectors
     features:
-      - source: osm
-        geometry: polygon
-        min_zoom: 13
-        include_when:
-          __all__:
-            - climbing: crag
-            - climbing:boulder: 'yes'
-        attributes:
-          - { key: name, tag_value: name }
-          - { key: description, tag_value: description }
-          - { key: url, tag_value: url }
-          - { key: website, tag_value: website }
-          - { key: kind, value: sector }
-          - { key: osm_type, value: '${ feature.osm_type }' }
-          - { key: osm_id, value: '${ feature.id }', type: long }
       - source: sector_sites
         geometry: point
-        min_zoom: 13
+        min_zoom: 12
         include_when:
           climbing: crag
         attributes:
           - { key: name, tag_value: name }
-          - { key: climbing, tag_value: climbing }
           - { key: kind, tag_value: kind }
           - { key: osm_type, tag_value: osm_type }
           - { key: osm_id, tag_value: osm_id, type: long }
-          - { key: parent_area_id, tag_value: parent_area_id, type: long }
-          - { key: parent_area_name, tag_value: parent_area_name }
-          - { key: parent_area_lon, tag_value: parent_area_lon, type: double }
-          - { key: parent_area_lat, tag_value: parent_area_lat, type: double }
-          - { key: parent_area_sectors, tag_value: parent_area_sectors }
+          - { key: rank, tag_value: rank, type: integer }
+          - { key: problem_count, tag_value: problem_count, type: integer }
+          - { key: has_rock, tag_value: has_rock, type: integer }
+
+  # ---- physical rock: polygons (sector = owning boulder, -1 if none) ----
+  - id: boulders
+    features:
+      - source: rocks
+        geometry: polygon
+        min_zoom: 12
+        include_when:
+          osm_type: [node, way, relation]
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: sector, tag_value: sector, type: long }
+          - { key: osm_type, tag_value: osm_type }
+          - { key: osm_id, tag_value: osm_id, type: long }
+
+  # ---- physical rock: point markers ----
+  - id: boulder_points
+    features:
+      - source: rocks
+        geometry: point
+        min_zoom: 12
+        include_when:
+          osm_type: [node, way, relation]
+        attributes:
+          - { key: name, tag_value: name }
+          - { key: sector, tag_value: sector, type: long }
+          - { key: osm_type, tag_value: osm_type }
+          - { key: osm_id, tag_value: osm_id, type: long }
 
   # ---- routes: climbing=route_bottom points ----
   - id: routes

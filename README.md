@@ -59,8 +59,9 @@ npm run dev        # http://localhost:5173
 ## Editor
 
 The desktop-first editor is available under `/edit`. There is no on-page entry
-button: navigate directly to `/edit` to open it. The agreed scope is in
-[`editor-feature-request.md`](editor-feature-request.md).
+button: navigate directly to `/edit` to open it. The editor is code-split from
+the viewer, so read-only visitors never download or run it. The agreed scope is
+in [`editor-feature-request.md`](editor-feature-request.md).
 
 ### Geometry and details
 

@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises'
 const base = process.env.EDITOR_TEST_URL || 'http://127.0.0.1:5199/'
 const server = process.env.EDITOR_TEST_URL ? undefined : spawn('node', ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5199', '--strictPort'], { stdio: 'pipe' })
 const errors = [], alerts = []
+const editorChunkRequests = []
 let dismissNextConfirmation = false
 let browser
 try {
@@ -29,8 +30,14 @@ try {
   await page.route('https://demotiles.maplibre.org/**', r => r.fulfill({ contentType: 'application/x-protobuf', body: Buffer.alloc(0) }))
   await page.route('https://overpass-api.de/api/interpreter', r => r.fulfill({ json: { elements: [] } }))
   page.on('request', request => {
+    const path = new URL(request.url()).pathname
+    if (/\/src\/editor|editor-[\w-]+\.js|\/src\/editing\//.test(path)) editorChunkRequests.push(path)
     if (request.url().startsWith('https://api.openstreetmap.org/')) assert.equal(request.method(), 'GET', 'Editor must never write directly to OSM')
   })
+  // View mode must not download the lazily-loaded editor chunk.
+  await page.goto(base)
+  await page.waitForFunction(() => window.__map?.isStyleLoaded())
+  assert.deepEqual(editorChunkRequests, [], 'Viewer must not load the editor chunk')
   await page.goto(`${base}edit#19/0/0`)
   await page.waitForFunction(() => window.__map?.getLayer('edit-vertices'))
   const clickTool = label => page.locator('.geometry-toolbar').getByRole('button', { name: label, exact: true }).click()

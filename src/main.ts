@@ -4,7 +4,7 @@ import { Protocol } from 'pmtiles'
 import { CLIMBING_METADATA_URL, INITIAL_VIEW } from './config'
 import { buildStyle } from './style'
 import { showRoute, showBoulder, hideSidebar, setRouteNavigator, setSectorNavigator } from './sidebar'
-import { initEditorButton, initEditorMap, isEditMode } from './editor'
+import { isEditMode } from './editMode'
 import { setSelectionMap } from './selection'
 import { routesOnBoulder, setBoulderRoutesMap } from './boulderRoutes'
 
@@ -53,8 +53,14 @@ void fetch(CLIMBING_METADATA_URL)
   })
   .catch(() => { /* The map remains usable if update metadata is unavailable. */ })
 
-initEditorButton(map)
-initEditorMap(map)
+// The editor is a separate chunk: viewers never download it. It is only
+// requested when the app is served on the edit route.
+if (isEditMode()) {
+  void import('./editor').then(({ initEditorButton, initEditorMap }) => {
+    initEditorButton(map)
+    initEditorMap(map)
+  })
+}
 
 // Store for debugging
 ;(window as any).__map = map

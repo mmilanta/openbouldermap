@@ -3,7 +3,8 @@
 import { parsePath, renderPhotoBlock } from './photos'
 import { gradeColor } from './grades'
 import { fetchProblemSector, fetchSectorArea, fetchAreaSectors, fetchSectorRoutes, type SectorRoute, type SectorSummary } from './sectorRoutes'
-import { isEditMode, showBoulderEditor, showRouteEditor, withLocalRouteEdits } from './editor'
+import { isEditMode } from './editMode'
+import { withLocalRouteEdits } from './localEdits'
 import { selectRoute } from './selection'
 import type { NearbyBoulderRoute } from './boulderRoutes'
 
@@ -72,7 +73,7 @@ export function showRoute(props: Record<string, any>, lon: number, lat: number):
   }
 
   if (isEditMode()) {
-    showRouteEditor(props, lon, lat)
+    void import('./editor').then(({ showRouteEditor }) => showRouteEditor(props, lon, lat))
     return
   }
 
@@ -135,7 +136,7 @@ export function showBoulder(
   props = { ...props, __lon: lon, __lat: lat }
   const kind = pick(props, 'kind')
   if (isEditMode()) {
-    showBoulderEditor(props, lon, lat)
+    void import('./editor').then(({ showBoulderEditor }) => showBoulderEditor(props, lon, lat))
     return
   }
 

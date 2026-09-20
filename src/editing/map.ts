@@ -49,7 +49,11 @@ export class EditingMap {
   private lastFeatures: GeoJSON.Feature[] = []
   private lastHandles: GeoJSON.Feature[] = []
   constructor(readonly map: LibreMap, readonly graph: EditGraph, readonly hooks: Hooks) {
-    map.on('load', () => this.init())
+    // The editor chunk loads lazily, so the map may already be loaded by the
+    // time this runs; initialize immediately in that case instead of waiting
+    // for a 'load' event that has already fired.
+    if (map.isStyleLoaded()) this.init()
+    else map.on('load', () => this.init())
     map.on('click', e => this.click(e))
     map.on('contextmenu', e => this.context(e))
     map.on('movestart', () => hooks.dismissContext())

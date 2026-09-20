@@ -1,7 +1,10 @@
 // Desktop OSM editor. All writes are local; publication is through an exported .osc.
 import type { Map as LibreMap } from 'maplibre-gl'
 import { BASE_URL, EDIT_PATH } from './config'
-import { createPathEditor, parsePath, stringifyPath, renderPhotoBlock } from './photos'
+import { isEditMode } from './editMode'
+import { setLocalRouteEdits } from './localEdits'
+import { parsePath, renderPhotoBlock } from './photos'
+import { createPathEditor, stringifyPath } from './editing/photoPath'
 import { gradeColor } from './grades'
 import { EditGraph, groupKind, isBoulder, isRoute, keyOf, type Element, type Key, type Position } from './editing/model'
 import { OsmReader } from './editing/osm'
@@ -10,6 +13,12 @@ import { MapContextMenu, type ContextAction } from './editing/context-menu'
 
 const graph = new EditGraph()
 const reader = new OsmReader(graph)
+// The viewer renders route lists through a no-op resolver; install the real
+// one so in-memory edits show up there while the editor is loaded.
+setLocalRouteEdits(props => {
+  const e = graph.get(`node/${Number(props.osm_id)}`)
+  return e ? { ...props, ...e.tags } : props
+})
 const sidebar = document.getElementById('sidebar')!
 const content = document.getElementById('sidebar-content')!
 const DRAFT_KEY = 'openbouldermap.editor.v1'
@@ -26,9 +35,6 @@ const visibleFailed = new Set<Key>()
 let reviewDialog: HTMLDialogElement | undefined
 let contextMenu: MapContextMenu | undefined
 
-export function isEditMode(): boolean {
-  return location.pathname.replace(/\/+$/, '') === EDIT_PATH.replace(/\/+$/, '') || new URLSearchParams(location.search).get('edit') === '1'
-}
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = ''): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag); el.textContent = text; el.className = className; return el
 }
@@ -314,10 +320,6 @@ export function showRouteEditor(props: Record<string, any>, _lon: number, _lat: 
 }
 export function showBoulderEditor(props: Record<string, any>, _lon: number, _lat: number): void {
   void select(`${props.osm_type ?? 'way'}/${Number(props.osm_id)}` as Key)
-}
-export function withLocalRouteEdits(props: Record<string, any>): Record<string, any> {
-  const e = graph.get(`node/${Number(props.osm_id)}`)
-  return e ? { ...props, ...e.tags } : props
 }
 function beginPanel(title: string): void { content.replaceChildren(node('h1', title, 'route-name')); sidebar.classList.remove('hidden') }
 function textField(parent: HTMLElement, label: string, value: string, onChange: (value: string) => void, multiline = false): HTMLInputElement | HTMLTextAreaElement {

@@ -35,7 +35,7 @@ function areaLabelLayers(maxRank: number): any[] {
       layout: {
         'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Bold'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 10, 15, 14],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 12, 15, 18],
         'text-anchor': 'center'
       },
       paint: {
@@ -224,7 +224,7 @@ export function buildStyle(maxRank = 1): StyleSpecification {
         layout: {
           'text-field': ['get', 'name'],
           'text-font': ['Noto Sans Bold'],
-          'text-size': 12,
+          'text-size': 16,
           'text-anchor': 'center'
         },
         paint: {

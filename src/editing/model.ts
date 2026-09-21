@@ -231,7 +231,7 @@ export class EditGraph {
     return children.length ? 1 + Math.max(...children.map(c => this.areaHeight(keyOf(c)))) : 0
   }
   createGroup(kind: 'sector' | 'area', name: string, description: string): Element {
-    return this.create('relation', { members: [], tags: { type: 'site', climbing: kind === 'sector' ? 'crag' : 'area', 'climbing:boulder': 'yes', ...(name.trim() ? { name: name.trim() } : {}), ...(description.trim() ? { description: description.trim() } : {}) } })
+    return this.create('relation', { members: [], tags: { type: 'site', site: 'climbing', sport: 'climbing', climbing: kind === 'sector' ? 'crag' : 'area', 'climbing:boulder': 'yes', ...(name.trim() ? { name: name.trim() } : {}), ...(description.trim() ? { description: description.trim() } : {}) } })
   }
   deleteFeature(key: Key): void {
     const e = this.require(key)

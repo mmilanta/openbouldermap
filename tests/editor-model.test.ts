@@ -96,6 +96,53 @@ test('inline creation and assignment is atomic; rocks, routes and areas link by 
   g.redo(); assert.equal(g.areas(sector!)[0].tags.name, 'New area')
 })
 
+test('every feature the editor creates exports tags that pass the OSM validator', () => {
+  // iD flags a climbing site relation that lacks `site=climbing`/`sport=climbing`
+  // ("Some features should have additional tags"). Every object this editor can
+  // create must already carry them, so an exported .osc never needs a manual fix.
+  const existing: Element = { type: 'relation', id: 500, version: 4, members: [],
+    tags: { type: 'site', site: 'climbing', sport: 'climbing', climbing: 'area', 'climbing:boulder': 'yes', name: 'Existing area', description: 'keep me' } }
+  const g = new EditGraph(); g.ingest([existing])
+  let area!: Element, sector!: Element, rock!: Element, route!: Element, areaKey!: Key, sectorKey!: Key
+  g.transaction('build full hierarchy', () => {
+    area = g.createGroup('area', 'New area', '')
+    sector = g.createGroup('sector', 'New boulder', '')
+    rock = g.addBoulder([[0, 0], [1, 0], [1, 1]])
+    route = g.addRoute([0.5, 0])
+    areaKey = keyOf(area); sectorKey = keyOf(sector)
+    g.assign(areaKey, 'relation/500') // nest the new area under an existing one
+    g.assign(sectorKey, areaKey)
+    g.assign(keyOf(rock), sectorKey)
+    g.assign(keyOf(route), sectorKey)
+  })
+  for (const group of [area, sector]) {
+    assert.equal(group.tags.type, 'site')
+    assert.equal(group.tags.site, 'climbing')
+    assert.equal(group.tags.sport, 'climbing')
+    assert.equal(group.tags['climbing:boulder'], 'yes')
+  }
+  assert.equal(area.tags.climbing, 'area')
+  assert.equal(sector.tags.climbing, 'crag')
+  assert.deepEqual(route.tags, { climbing: 'route_bottom', 'climbing:boulder': 'yes', sport: 'climbing' })
+  assert.deepEqual(rock.tags, { climbing: 'boulder', natural: 'stone', sport: 'climbing' })
+
+  const osc = g.exportOsc(), block = (id: string) => {
+    const match = osc.match(new RegExp(`<relation id="${id}"[^>]*>[\\s\\S]*?</relation>`))
+    assert.ok(match, `relation ${id} should be exported`)
+    return match![0]
+  }
+  // Both created site relations carry the tags iD suggests, without a version.
+  for (const id of [keyOf(area).split('/')[1], keyOf(sector).split('/')[1]]) {
+    assert.match(block(id), /<relation id="-[0-9]+">/)
+    assert.match(block(id), /k="site" v="climbing"/)
+    assert.match(block(id), /k="sport" v="climbing"/)
+    assert.match(block(id), /k="climbing:boulder" v="yes"/)
+  }
+  // Joining an existing relation modifies it: version and untouched tags survive.
+  assert.match(osc, /<relation id="500" version="4">/)
+  assert.match(block('500'), /k="description" v="keep me"/)
+})
+
 test('areas nest by father; cycles and excessive depth are refused', () => {
   const g = fixture(); let a: Key, b: Key, c: Key
   g.transaction('nest', () => {

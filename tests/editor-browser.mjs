@@ -172,10 +172,16 @@ try {
   await page.getByRole('button', { name: 'Check current OSM data and download .osc', exact: true }).click()
   const download = await downloadPromise
   const xml = await readFile(await download.path(), 'utf8')
+  if (process.env.DEBUG_OSC) console.error(xml)
   assert.match(xml, /<create>/)
   assert.match(xml, /Test boulder/); assert.match(xml, /Test area/); assert.match(xml, /Sub area/)
   assert.match(xml, /k="climbing" v="crag"/); assert.match(xml, /k="climbing" v="area"/)
   assert.match(xml, /k="climbing:grade:font" v="6C"/)
+  // iD flags climbing site relations missing site=/sport=climbing; the editor must
+  // never produce an .osc that needs the manual add-site-climbing fix.
+  const occurrences = needle => xml.split(needle).length - 1
+  assert.equal(occurrences('k="site" v="climbing"'), 3, 'each of the three created site relations carries site=climbing')
+  assert.equal(occurrences('k="sport" v="climbing"'), 6, 'three relations plus the rock and both routes carry sport=climbing')
   assert.doesNotMatch(xml, /<modify>|<delete>/)
   await page.locator('dialog').getByRole('button', { name: 'Close', exact: true }).click()
 

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Add the missing `site=climbing` tag to the climbing site relations.
+"""Add the missing `site=climbing`/`sport=climbing` tags to climbing site relations.
 
-iD/OSM flags every `type=site` relation that carries no `site=*` tag
-("Climbing Crag has incomplete tags; suggested update: + site=climbing").
-The boulder restructure added the `type=site` relations without that tag, so
-this fetches their *current* versions straight from the OSM API and emits an
-.osc that only adds the tag. Everything else (members, other tags, versions)
-is copied verbatim from the live data, so the result uploads cleanly.
+iD/OSM flags every `type=site` relation that carries no `site=*` or `sport=*` tag
+("Climbing Crag has incomplete tags; suggested update: + site=climbing
++ sport=climbing"). The boulder restructure added the `type=site` relations
+without those tags, so this fetches their *current* versions straight from the
+OSM API and emits an .osc that only adds the missing tags. Everything else
+(members, other tags, versions) is copied verbatim from the live data, so the
+result uploads cleanly.
 
 Input : relation ids. By default every positive relation id referenced by
         changes/*.osc is used.
@@ -80,7 +81,7 @@ def main() -> None:
         r for r in relations
         if r.get("visible") != "false"
         and tag(r, "type") == "site"
-        and tag(r, "site") is None
+        and (tag(r, "site") is None or tag(r, "sport") is None)
     ]
 
     lines = [
@@ -99,6 +100,7 @@ def main() -> None:
             )
         tags = {t.get("k"): t.get("v") for t in rel.findall("tag")}
         tags["site"] = "climbing"
+        tags["sport"] = "climbing"
         for key in sorted(tags):
             lines.append(f'      <tag k="{xml(key)}" v="{xml(tags[key])}" />')
         lines.append("    </relation>")
@@ -112,7 +114,8 @@ def main() -> None:
     for rel in sorted(missing, key=lambda r: int(r.get("id"))):
         name = tag(rel, "name") or ""
         climbing = tag(rel, "climbing") or ""
-        print(f"  + site=climbing  {rel.get('id')} (v{rel.get('version')}, climbing={climbing}, name={name!r})")
+        added = ", ".join(k for k in ("site", "sport") if tag(rel, k) is None)
+        print(f"  + {added}=climbing  {rel.get('id')} (v{rel.get('version')}, climbing={climbing}, name={name!r})")
     print(f"\n{len(missing)} of {len(relations)} relations fixed -> {out_path}")
 
 

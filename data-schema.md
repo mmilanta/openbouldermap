@@ -91,8 +91,8 @@ bouldering, one crag relation **represents one boulder**.
 | `type=site` | yes | |
 | `climbing=crag` | yes | this relation is a crag |
 | `climbing:boulder=yes` | **yes** | it is a *bouldering* crag (a boulder) |
-| `sport=climbing` | usually | |
-| `site=climbing` | optional | |
+| `sport=climbing` | yes | the editor always writes it; iD warns without it |
+| `site=climbing` | yes | the editor always writes it; iD warns without it |
 | `name` | optional | boulders are often unnamed |
 
 Members: the `climbing=route_bottom` problems **and** the physical rock
@@ -111,7 +111,8 @@ A logical grouping of crags (and/or other areas). Recursive.
 | `type=site` | yes | |
 | `climbing=area` | yes | |
 | `climbing:boulder=yes` | **yes** | it is a *bouldering* area |
-| `sport=climbing` | usually | |
+| `sport=climbing` | yes | the editor always writes it; iD warns without it |
+| `site=climbing` | optional | not required on an area, but the editor writes it too |
 | `name` | usually | |
 | `description` | optional | |
 

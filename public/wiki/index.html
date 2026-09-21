@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenBoulderMap Wiki</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1a6fa8" />
+    <meta
+      name="description"
+      content="The OpenStreetMap bouldering data model, grades and mapping guide behind OpenBoulderMap."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    />
+    <link rel="stylesheet" href="/wiki/wiki.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/wiki/">OpenBoulderMap <span>Wiki</span></a>
+      <nav>
+        <a href="#model">Data model</a>
+        <a href="#grades">Grades</a>
+        <a href="#mapping">Contributing</a>
+        <a href="#links">Links</a>
+      </nav>
+      <span class="spacer"></span>
+      <a class="app-link" href="/">← Open the map</a>
+    </header>
+
+    <main class="wrap">
+      <div class="hero">
+        <h1>OpenBoulderMap Wiki</h1>
+        <p class="lede">
+          A worldwide bouldering map built entirely on
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+          data. OSM is the <strong>source of truth</strong>; this site only renders a derived,
+          regenerable snapshot of it.
+        </p>
+      </div>
+
+      <h2 id="model">Data model</h2>
+      <p>
+        Bouldering uses the same <code>climbing=*</code> vocabulary as roped climbing. There is
+        <strong>no separate “boulder level”</strong>: a single boulder <em>is</em> a
+        <code>climbing=crag</code> relation. Every link in the chain is optional.
+      </p>
+      <pre><span class="k">problem</span>   node       <span class="g">climbing=route_bottom</span> + <span class="g">climbing:boulder=yes</span>
+  │  member of        <span class="c">(optional)</span>
+<span class="k">crag</span>      relation   <span class="g">type=site</span> + <span class="g">climbing=crag</span> + <span class="g">climbing:boulder=yes</span>   <span class="c">← one boulder</span>
+  │  member of        <span class="c">(optional)</span>
+<span class="k">area</span>      relation   <span class="g">type=site</span> + <span class="g">climbing=area</span> + <span class="g">climbing:boulder=yes</span>
+  │  member of        <span class="c">(optional, recursive — areas nest)</span>
+<span class="k">(nested area)</span>
+
+<span class="c"># the physical rock is a separate object, not part of the containment chain</span>
+<span class="r">physical rock</span>   node / way / multipolygon   <span class="g">climbing=boulder</span> + <span class="g">natural=bare_rock|stone</span> + <span class="g">sport=climbing</span></pre>
+
+      <table>
+        <thead>
+          <tr><th>Object</th><th>Required OSM tags</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Problem</strong><br /><span class="muted">node</span></td>
+            <td><code>climbing=route_bottom</code> <code>climbing:boulder=yes</code> <code>sport=climbing</code></td>
+            <td>A <em>point</em> at the problem's start. Optional <code>name</code>, grades, photo.</td>
+          </tr>
+          <tr>
+            <td><strong>Crag / boulder</strong><br /><span class="muted">relation</span></td>
+            <td><code>type=site</code> <code>climbing=crag</code> <code>climbing:boulder=yes</code> <code>sport=climbing</code> <code>site=climbing</code></td>
+            <td>One boulder. Members: its problem nodes + the physical rock.</td>
+          </tr>
+          <tr>
+            <td><strong>Area</strong><br /><span class="muted">relation</span></td>
+            <td><code>type=site</code> <code>climbing=area</code> <code>climbing:boulder=yes</code> <code>sport=climbing</code></td>
+            <td>Groups crags and/or other areas. Usually named. Recursive.</td>
+          </tr>
+          <tr>
+            <td><strong>Physical rock</strong><br /><span class="muted">node / way / multipolygon</span></td>
+            <td><code>climbing=boulder</code> <code>natural=bare_rock|stone</code> <code>sport=climbing</code></td>
+            <td>Drawn shape, listed as a member of its crag.</td>
+          </tr>
+        </tbody>
+      </table>
+      <ul>
+        <li><strong>At most one parent per kind</strong> — a problem belongs to ≤1 crag, a crag to ≤1 area.</li>
+        <li><strong>Membership, not geometry</strong> — “in” a crag/area means being a relation member. Spatial position is only a discovery aid.</li>
+        <li><strong>Empty member roles.</strong> <code>climbing:boulder=yes</code> is what distinguishes bouldering crags/areas from roped ones.</li>
+      </ul>
+      <div class="note">
+        The UI calls a crag a <strong>Boulder</strong> when its physical rock is linked, and a
+        <strong>Sector</strong> otherwise. The viewer reads a regenerable snapshot
+        (<code>climbing.pmtiles</code> + a static index) and never calls the live OSM API.
+      </div>
+
+      <h2 id="grades">Grades</h2>
+      <p>
+        Two scales are rendered, each with its own colour ramp.
+        <strong>Grades are never converted between scales</strong> — a <code>7A+</code> is never
+        turned into a <code>V7</code>. Grades are tagged on the <strong>problem node</strong>.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Scale</th><th>OSM tag</th><th>Example</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Fontainebleau (Font)</td><td><code>climbing:grade:font</code></td><td><code>7A+</code></td></tr>
+          <tr><td>Hueco / V</td><td><code>climbing:grade:hueco</code></td><td><code>V6</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        The route dot takes the Hueco value first, then Font. Both share a green→red ramp, but the
+        columns below are independent — not a conversion table.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Colour</th><th>Font</th><th>Hueco / V</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="swatch" style="background:#2e7d32">easy</span></td><td><code>1</code>–<code>3+</code></td><td><code>VB</code>, <code>V0-</code></td></tr>
+          <tr><td><span class="swatch" style="background:#43a047">easy</span></td><td><code>4</code>–<code>4+</code></td><td><code>V0</code>–<code>V0+</code></td></tr>
+          <tr><td><span class="swatch" style="background:#7cb342">easy</span></td><td><code>5</code>–<code>5B+</code></td><td><code>V1</code>–<code>V2+</code></td></tr>
+          <tr><td><span class="swatch light" style="background:#c0ca33">mid</span></td><td><code>5C</code>–<code>6A</code></td><td><code>V3</code>–<code>V3+</code></td></tr>
+          <tr><td><span class="swatch light" style="background:#fdd835">mid</span></td><td><code>6A+</code>–<code>6B</code></td><td><code>V4</code>–<code>V4+</code></td></tr>
+          <tr><td><span class="swatch" style="background:#ffb300">mid</span></td><td><code>6B+</code>–<code>6C</code></td><td><code>V5</code>–<code>V5+</code></td></tr>
+          <tr><td><span class="swatch" style="background:#fb8c00">hard</span></td><td><code>6C+</code>–<code>7A</code></td><td><code>V6</code>–<code>V6+</code></td></tr>
+          <tr><td><span class="swatch" style="background:#f4511e">hard</span></td><td><code>7A+</code>–<code>7B</code></td><td><code>V7</code>–<code>V7+</code></td></tr>
+          <tr><td><span class="swatch" style="background:#e53935">hard</span></td><td><code>7B+</code>–<code>7C</code></td><td><code>V8</code>–<code>V8+</code></td></tr>
+          <tr><td><span class="swatch" style="background:#b71c1c">elite</span></td><td><code>7C+</code>–<code>9A</code></td><td><code>V9</code>–<code>V17</code></td></tr>
+        </tbody>
+      </table>
+      <p class="small muted">
+        Any other <code>climbing:grade:*</code> scale (UIAA, French, YDS, …) is shown in neutral
+        gray, with its label — visible without pretending the app understands it. Ungraded problems
+        are also gray.
+      </p>
+
+      <h2 id="mapping">Contributing</h2>
+      <p>
+        Add features in OSM and they appear here after the next daily tile refresh. Nothing is ever
+        written to OSM automatically.
+      </p>
+      <ul>
+        <li>
+          <a href="/edit"><strong>OpenBoulderMap editor</strong></a> — desktop-first and
+          boulder-specific. It previews locally, then exports an <code>.osc</code> changefile you
+          upload through <a href="https://josm.openstreetmap.de/" target="_blank" rel="noopener">JOSM</a>.
+        </li>
+        <li>
+          <a href="https://www.openstreetmap.org/edit" target="_blank" rel="noopener">iD</a> — the
+          default browser editor, fine for small tag edits.
+        </li>
+        <li>
+          <a href="https://openclimbing.org/" target="_blank" rel="noopener">OpenClimbing</a> —
+          another editor over the same data, strong for drawing routes on photos.
+        </li>
+      </ul>
+      <p>
+        <strong>To map a boulder:</strong> (1) trace the rock and tag it
+        <code>climbing=boulder</code> + <code>natural=bare_rock|stone</code> +
+        <code>sport=climbing</code>; (2) create the <code>climbing=crag</code> +
+        <code>climbing:boulder=yes</code> relation; (3) add the rock and each problem as members.
+        Problems are nodes tagged <code>climbing=route_bottom</code> +
+        <code>climbing:boulder=yes</code>, optionally with a name and grade.
+      </p>
+      <p class="small muted">
+        Photos live on Wikimedia Commons: attach one with <code>wikimedia_commons=File:…</code> and
+        draw the line on it with
+        <a href="https://wiki.openstreetmap.org/wiki/Key:wikimedia_commons:path" target="_blank" rel="noopener"><code>wikimedia_commons:path</code></a>.
+      </p>
+
+      <h2 id="links">Links</h2>
+      <ul>
+        <li><a href="https://wiki.openstreetmap.org/wiki/Climbing" target="_blank" rel="noopener">OSM wiki — Climbing</a>: the canonical tag documentation.</li>
+        <li><a href="https://wiki.openstreetmap.org/wiki/Key:climbing" target="_blank" rel="noopener">OSM wiki — Key:climbing</a>: index of all climbing keys.</li>
+        <li><a href="https://wiki.openstreetmap.org/wiki/Climbing/Grading" target="_blank" rel="noopener">OSM wiki — Climbing/Grading</a>: approximate cross-scale tables.</li>
+        <li><a href="https://openclimbing.org/" target="_blank" rel="noopener">OpenClimbing.org</a>: free climbing guide on the same OSM data.</li>
+        <li><a href="https://github.com/mmilanta/openbouldermap" target="_blank" rel="noopener">OpenBoulderMap on GitHub</a>.</li>
+      </ul>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <p>
+          OpenBoulderMap is <a href="https://github.com/mmilanta/openbouldermap" target="_blank" rel="noopener">open source</a> (MIT).
+          Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).
+          Basemap tiles from <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,189 @@
+/* OpenBoulderMap wiki — same "OSM native" language as the app: cool neutral
+   chrome, hairline borders, hard corners, one blue accent. Colour is reserved
+   for the data (grade swatches), text stays plain ink. */
+
+:root {
+  --ink: #14222e;
+  --text: #2c3c4a;
+  --muted: #5f7183;
+  --paper: #ffffff;
+  --panel: #ecf2f7;
+  --app-bg: #e0eaf1;
+  --line: #ccd9e2;
+  --line-strong: #a9bccb;
+  --link: #1a6fa8;
+  --link-bright: #135a8c;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--app-bg);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.65;
+}
+
+a { color: var(--link); text-decoration: none; }
+a:hover { color: var(--link-bright); text-decoration: underline; }
+
+/* ---- top bar ---- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.brand:hover { text-decoration: none; color: var(--ink); }
+.brand span { color: var(--link); }
+
+.topbar nav { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; }
+.topbar nav a { color: var(--muted); }
+.topbar nav a:hover { color: var(--ink); text-decoration: none; }
+
+.topbar .spacer { flex: 1; }
+.topbar .app-link {
+  font-size: 13px;
+  padding: 5px 11px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  background: var(--paper);
+  white-space: nowrap;
+}
+.topbar .app-link:hover { background: var(--panel); text-decoration: none; }
+
+/* ---- layout ---- */
+.wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 34px 24px 80px;
+}
+
+.hero { margin-bottom: 30px; }
+.hero h1 {
+  font-size: 30px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0 0 10px;
+}
+.hero .lede { font-size: 16px; color: var(--muted); margin: 0; max-width: 68ch; }
+
+h2 {
+  font-size: 21px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 42px 0 12px;
+  scroll-margin-top: 70px;
+}
+p { margin: 0 0 14px; }
+
+ul { margin: 0 0 16px; padding-left: 22px; }
+li { margin: 4px 0; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+
+/* ---- tables ---- */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 6px 0 18px;
+  font-size: 13.5px;
+  background: var(--paper);
+}
+th, td {
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--panel); color: var(--ink); font-weight: 600; }
+td code { white-space: normal; }
+
+/* ---- hierarchy / code block ---- */
+pre {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  background: #0f1c26;
+  color: #d7e6f0;
+  padding: 16px 18px;
+  overflow-x: auto;
+  border: 1px solid #0a141c;
+}
+pre .c { color: #7fa6bd; }
+pre .k { color: #9fd0f0; }
+pre .g { color: #a5d6a7; }
+pre .r { color: #f0a97f; }
+
+/* ---- callout ---- */
+.note {
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--link);
+  padding: 12px 16px;
+  margin: 0 0 18px;
+  font-size: 13.5px;
+}
+.note strong { color: var(--ink); }
+
+/* ---- grade swatches ---- */
+.swatch {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  padding: 3px 8px;
+  min-width: 42px;
+  text-align: center;
+}
+.swatch.light { color: #14222e; }
+
+/* ---- footer ---- */
+footer {
+  border-top: 1px solid var(--line-strong);
+  background: var(--paper);
+  padding: 22px 24px 34px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+footer .wrap { padding: 0; max-width: 860px; }
+footer a { color: var(--muted); }
+footer a:hover { color: var(--link); }
+
+@media (max-width: 560px) {
+  .hero h1 { font-size: 25px; }
+  .wrap { padding: 26px 16px 60px; }
+  .topbar { padding: 10px 16px; gap: 12px; }
+}

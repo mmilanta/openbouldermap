@@ -5,6 +5,11 @@ truth**; the app only renders a derived, regenerable snapshot (PMTiles).
 
 **Live map:** [openbouldermap.org](https://openbouldermap.org)
 
+**Wiki:** [openbouldermap.org/wiki](https://openbouldermap.org/wiki) — a small,
+hand-written guide to the data model, grades and mapping workflow. Its static
+HTML/CSS sources live in [`public/wiki/`](public/wiki/) and are copied verbatim
+into `dist/wiki/` by the Vite build.
+
 - **Basemap**: vector tiles from [OpenFreeMap](https://openfreemap.org/) (free, no API key).
 - **Climbing features**: tiny self-hosted PMTiles (boulders + routes only, a few MB globally).
 - **Frontend**: Vite + TypeScript + MapLibre GL JS, reading climbing PMTiles via the `pmtiles` protocol.
@@ -175,7 +180,9 @@ and discard. `BROWSER_EXECUTABLE` can select an existing Chromium installation;
 
 ## Data model
 
-See [`data-schema.md`](data-schema.md) for the full model. In short:
+See [`data-schema.md`](data-schema.md) for the full model, or the published
+[wiki](https://openbouldermap.org/wiki) for the reader-friendly
+version. In short:
 
 ### Physical rock
 `climbing=boulder` AND `natural∈{bare_rock,stone}` → filled polygon (or point).

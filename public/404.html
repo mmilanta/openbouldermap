@@ -6,7 +6,8 @@
     <script>
       // GitHub Pages has no SPA fallback, so a direct visit to
       // /edit would otherwise return 404. This page redirects the missing
-      // /edit route to the app while preserving the map hash.
+      // /edit route to the app while preserving the map hash. It also sends a
+      // slash-less /wiki to the wiki's index page.
       (function () {
         var base = '/'
         var root = base.replace(/\/+$/, '')
@@ -16,6 +17,10 @@
 
         if (path === root + '/edit') {
           target = window.location.origin + base + '?edit=1' + hash
+        }
+
+        if (path === root + '/wiki') {
+          target = window.location.origin + base + 'wiki/' + hash
         }
 
         window.location.replace(target)

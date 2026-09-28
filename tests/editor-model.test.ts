@@ -226,3 +226,32 @@ test('draft round trip retains history and discard clears all local changes', ()
   restored.redo(); assert.equal(restored.attached('node/1').length, 0); restored.discard(); assert.equal(restored.changes().length, 0)
   assert.equal(restored.undoLabel, undefined)
 })
+test('a route already in two boulders on OSM stays editable; new conflicts are still blocked', () => {
+  const g = fixture()
+  g.ingest([{ type: 'relation', id: 3, version: 1, members: [{ type: 'node', ref: 5, role: '' }], tags: { type: 'site', climbing: 'crag', 'climbing:boulder': 'yes', name: 'Other sector' } }])
+  // Pre-existing double membership: renaming the route and its parents is allowed.
+  g.transaction('rename route', () => g.setTags('node/5', { name: 'Renamed' }))
+  g.transaction('rename parent', () => g.setTags('relation/3', { name: 'Renamed sector' }))
+  assert.equal(g.require('node/5').tags.name, 'Renamed')
+  assert.ok(g.warnings().some(w => w.includes('node/5') && w.includes('several boulders')))
+  // Adding a third parent by hand is a conflict introduced locally.
+  assert.throws(() => g.transaction('conflict', () => {
+    const extra = g.createGroup('sector', 'Third', '')
+    g.update(keyOf(extra), r => { r.members!.push({ type: 'node', ref: 1, role: '' }) })
+  }), /Conflicting parents for node\/1/)
+  // assign() replaces instead of adding, so re-parenting still works.
+  g.transaction('reassign', () => g.assign('node/1', 'relation/3'))
+  assert.deepEqual(g.parentGroups('node/1').map(keyOf), ['relation/3'])
+})
+test('cached parent lookups follow edits, undo, redo and draft restore', () => {
+  const g = fixture()
+  assert.deepEqual(g.parents('node/1').map(keyOf).sort(), ['relation/1', 'way/1'])
+  g.transaction('detach', () => g.detach('node/1'))
+  assert.deepEqual(g.parents('node/1').map(keyOf), ['relation/1'])
+  g.undo(); assert.deepEqual(g.parents('node/1').map(keyOf).sort(), ['relation/1', 'way/1'])
+  g.redo(); assert.deepEqual(g.parents('node/1').map(keyOf), ['relation/1'])
+  const saved = g.serialize(), restored = new EditGraph()
+  restored.restore(saved)
+  assert.deepEqual(restored.parents('node/1').map(keyOf), ['relation/1'])
+  g.reset(); assert.equal(g.all().length, 0)
+})

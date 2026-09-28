@@ -74,7 +74,8 @@ try {
 
   const searchFor = async name => {
     await page.fill('.search-input', name)
-    await page.waitForSelector('.search-result')
+    // Results of the previous query can still be on screen; wait for this one.
+    await page.waitForFunction(n => [...document.querySelectorAll('.search-result-name')].some(e => e.textContent === n), name, { timeout: 5000 }).catch(() => {})
     const names = await page.$$eval('.search-result-name', els => els.map(e => e.textContent))
     assert.ok(names.includes(name), `expected "${name}" in results, got ${JSON.stringify(names.slice(0, 5))}`)
     return page.locator('.search-result', { hasText: name }).first()
@@ -101,7 +102,7 @@ try {
 
   // Keyboard navigation selects a boulder.
   await page.fill('.search-input', sectorName)
-  await page.waitForSelector('.search-result')
+  await page.waitForFunction(n => document.querySelector('.search-result-name')?.textContent === n, sectorName)
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Enter')
   await page.waitForFunction(name => document.querySelector('#sidebar h1')?.textContent?.includes(name), sectorName)

@@ -26,10 +26,7 @@ const POINT_CURSOR_LAYERS = [
   'edit-vertices', 'edit-routes',
   'route', 'route-hit',
   'boulder-point', 'boulder-point-label', 'boulder-label',
-  'sector-label', ...AREA_LABEL_LAYERS,
-  // Live edit-mode layers, present once the live-data feature is merged.
-  'live-route', 'live-route-hit',
-  'live-boulder-point', 'live-boulder-point-label', 'live-boulder-label', 'live-sector-label'
+  'sector-label', ...AREA_LABEL_LAYERS
 ]
 export class EditingMap {
   selected?: Key
@@ -49,6 +46,9 @@ export class EditingMap {
   // asynchronous GeoJSON re-parse (queryRenderedFeatures can lag a change).
   private lastFeatures: GeoJSON.Feature[] = []
   private lastHandles: GeoJSON.Feature[] = []
+  private frame?: number
+  // Display-only label positions of partially loaded groups, read from tiles.
+  private tilePositions = new Map<Key, Position>()
   constructor(readonly map: LibreMap, readonly graph: EditGraph, readonly hooks: Hooks) {
     // The editor chunk loads lazily, so the map may already be loaded by the
     // time this runs; initialize immediately in that case instead of waiting
@@ -65,7 +65,8 @@ export class EditingMap {
     // Panning shows the closed hand; the open hand is the select default.
     map.on('dragstart', () => { this.panning = true; this.applyCursor() })
     map.on('dragend', () => { this.panning = false; this.applyCursor() })
-    map.on('idle', () => { if (this.ready) hooks.loadVisible() })
+    // Snap targets are only needed while placing or dragging a route.
+    map.on('idle', () => { if (this.ready && this.wantsSnapTargets()) hooks.loadVisible() })
     window.addEventListener('mouseup', () => { if (this.drag) this.cancelDrag() })
     window.addEventListener('blur', () => this.cancelDrag())
   }
@@ -84,7 +85,22 @@ export class EditingMap {
     m.addLayer({ id: 'edit-vertices', type: 'circle', source: 'edit-handles', paint: { 'circle-radius': ['case', ['==', ['get', 'handle'], 'midpoint'], 4, 6], 'circle-color': ['case', ['get', 'route'], '#f2a23a', '#fff'], 'circle-stroke-color': ['case', ['get', 'selected'], '#e02929', '#194f7a'], 'circle-stroke-width': 2 } })
     m.addLayer({ id: 'edit-sketch-line', type: 'line', source: 'edit-sketch', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#d36b00', 'line-width': 3, 'line-dasharray': [2, 1] } })
     m.addLayer({ id: 'edit-sketch-points', type: 'circle', source: 'edit-sketch', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 7, 'circle-color': '#ffbb44', 'circle-stroke-width': 2, 'circle-stroke-color': '#111' } })
-    this.ready = true; this.render(); this.applyCursor(); this.hooks.loadVisible()
+    this.ready = true; this.render(); this.applyCursor()
+  }
+  private wantsSnapTargets(): boolean {
+    return this.tool === 'route' || isRoute(this.selected ? this.graph.get(this.selected) : undefined)
+  }
+  /** Coalesce high-frequency redraws (mouse moves) into one per animation frame. */
+  private scheduleRender(): void {
+    if (typeof requestAnimationFrame !== 'function') { this.render(); return }
+    if (this.frame !== undefined) return
+    this.frame = requestAnimationFrame(() => { this.frame = undefined; this.render() })
+  }
+  private renderSketch(): void {
+    const sketch: GeoJSON.Feature[] = this.drawing.map(p => this.feature({ type: 'Point', coordinates: p }, {}))
+    if (this.drawing.length > 1) sketch.push(this.feature({ type: 'LineString', coordinates: this.drawing }, {}))
+    if (this.snap) sketch.push(this.feature({ type: 'Point', coordinates: this.snap.position }, {}))
+    ;(this.map.getSource('edit-sketch') as GeoJSONSource).setData({ type: 'FeatureCollection', features: sketch })
   }
   setTool(tool: EditingMap['tool']): void {
     this.hooks.dismissContext()
@@ -95,7 +111,10 @@ export class EditingMap {
   }
   finish(): void { if (this.tool === 'boulder') this.hooks.createBoulder([...this.drawing]) }
   cancel(): void { this.setTool('select') }
-  select(key?: Key): void { this.selected = key; this.vertexSelection = undefined; this.render() }
+  select(key?: Key): void {
+    this.selected = key; this.vertexSelection = undefined; this.render()
+    if (this.ready && this.wantsSnapTargets()) this.hooks.loadVisible()
+  }
   private point(id: number): Position { return this.preview.get(id) ?? this.graph.position(id) }
   private feature(geometry: GeoJSON.Geometry, properties: Record<string, any>): GeoJSON.Feature { return { type: 'Feature', geometry, properties } }
   private selectedWays(): Element[] {
@@ -115,12 +134,18 @@ export class EditingMap {
     }
     if (positions.length) return [positions.reduce((sum, p) => sum + p[0], 0) / positions.length, positions.reduce((sum, p) => sum + p[1], 0) / positions.length]
     // Existing labels can provide a display-only fallback for partially loaded groups.
+    const key = keyOf(e), cached = this.tilePositions.get(key)
+    if (cached) return cached
     const kind = groupKind(e)
     const tile = kind && this.map.querySourceFeatures('climbing', { sourceLayer: kind === 'area' ? 'areas' : 'sectors' }).find(f => Number(f.properties.osm_id) === e.id && f.properties.osm_type === e.type && f.geometry.type === 'Point')
-    return tile ? (tile.geometry as GeoJSON.Point).coordinates as Position : undefined
+    if (!tile) return undefined
+    const position = (tile.geometry as GeoJSON.Point).coordinates as Position
+    this.tilePositions.set(key, position)
+    return position
   }
   render(): void {
     if (!this.ready) return
+    if (this.frame !== undefined) { cancelAnimationFrame(this.frame); this.frame = undefined }
     const features: GeoJSON.Feature[] = [], handles: GeoJSON.Feature[] = []
     for (const e of this.graph.all()) {
       const key = keyOf(e), properties = { key, name: e.tags.name ?? '', selected: key === this.selected }
@@ -158,10 +183,7 @@ export class EditingMap {
     this.lastHandles = handles
     ;(this.map.getSource('edit-features') as GeoJSONSource).setData({ type: 'FeatureCollection', features })
     ;(this.map.getSource('edit-handles') as GeoJSONSource).setData({ type: 'FeatureCollection', features: handles })
-    const sketch: GeoJSON.Feature[] = this.drawing.map(p => this.feature({ type: 'Point', coordinates: p }, {}))
-    if (this.drawing.length > 1) sketch.push(this.feature({ type: 'LineString', coordinates: this.drawing }, {}))
-    if (this.snap) sketch.push(this.feature({ type: 'Point', coordinates: this.snap.position }, {}))
-    ;(this.map.getSource('edit-sketch') as GeoJSONSource).setData({ type: 'FeatureCollection', features: sketch })
+    this.renderSketch()
     // Hide stale tile versions of locally loaded routes and successfully drawn boulders,
     // plus deleted features. OSM types are part of identity (IDs overlap across types).
     const hidden = new Set(features.map(f => f.properties!.key as Key))
@@ -179,12 +201,27 @@ export class EditingMap {
   snapAt(p: Position, exclude?: Key): Snap | undefined {
     const q = this.map.project(p)
     let result: Snap | undefined, distance = 13
+    const excluded = exclude ? this.graph.require(exclude).id : undefined
+    // Cheap geographic pre-filter: skip rings whose bounding box is farther than
+    // the snap radius, so only nearby rings are projected to screen space.
+    let box: [number, number, number, number] | undefined
+    if (typeof this.map.unproject === 'function') {
+      const a = this.map.unproject([q.x - distance, q.y - distance]), b = this.map.unproject([q.x + distance, q.y + distance])
+      box = [Math.min(a.lng, b.lng), Math.min(a.lat, b.lat), Math.max(a.lng, b.lng), Math.max(a.lat, b.lat)]
+    }
     for (const way of this.graph.boulderWays()) {
       const ids = way.nodes ?? []
-      if (exclude && ids.includes(this.graph.require(exclude).id)) continue
+      if (excluded !== undefined && ids.includes(excluded)) continue
+      const positions = ids.map(id => this.graph.get(`node/${id}`) ? this.graph.position(id) : undefined)
+      if (box) {
+        const known = positions.filter((x): x is Position => !!x)
+        if (!known.length || Math.max(...known.map(x => x[0])) < box[0] || Math.min(...known.map(x => x[0])) > box[2] ||
+          Math.max(...known.map(x => x[1])) < box[1] || Math.min(...known.map(x => x[1])) > box[3]) continue
+      }
+      const screen = positions.map(x => x && this.map.project(x))
       for (let i = 0; i < ids.length - 1; i++) {
-        if (!this.graph.get(`node/${ids[i]}`) || !this.graph.get(`node/${ids[i + 1]}`)) continue
-        const a = this.map.project(this.graph.position(ids[i])), b = this.map.project(this.graph.position(ids[i + 1]))
+        if (!screen[i] || !screen[i + 1]) continue
+        const a = screen[i]!, b = screen[i + 1]!
         const dx = b.x - a.x, dy = b.y - a.y, length = dx * dx + dy * dy
         const t = length ? Math.max(0, Math.min(1, ((q.x - a.x) * dx + (q.y - a.y) * dy) / length)) : 0
         const nearest = { x: a.x + t * dx, y: a.y + t * dy }, d = Math.hypot(q.x - nearest.x, q.y - nearest.y)
@@ -319,7 +356,7 @@ export class EditingMap {
     this.applyCursor(e)
     const p: Position = [e.lngLat.lng, e.lngLat.lat]
     if (!this.hooks.canInteract()) return
-    if (this.tool === 'route') { this.snap = e.originalEvent.altKey ? undefined : this.snapAt(p); this.render(); return }
+    if (this.tool === 'route') { this.snap = e.originalEvent.altKey ? undefined : this.snapAt(p); this.renderSketch(); return }
     if (!this.drag) return
     const d = this.drag, start = this.map.project(d.start)
     if (Math.hypot(start.x - e.point.x, start.y - e.point.y) < 3 && !d.moved) return
@@ -332,7 +369,7 @@ export class EditingMap {
       if (isRoute(this.graph.get(d.key)) && !this.graph.attached(d.key).length && !e.originalEvent.altKey && !leavingDetachedPoint) this.snap = this.snapAt(p, d.key)
       this.preview.set(this.graph.require(d.key).id, this.snap?.position ?? p)
     }
-    this.render()
+    this.scheduleRender()
   }
   private async up(e: MapMouseEvent): Promise<void> {
     const d = this.drag, snap = this.snap

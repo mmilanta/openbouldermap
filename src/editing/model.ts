@@ -39,8 +39,14 @@ export class EditGraph {
   private state: State = { overrides: {}, nextId: -1 }
   private past: History[] = []
   private future: History[] = []
+  // Derived lookups. Every mutation clears them; they are rebuilt lazily in a
+  // single pass, so parent lookups are O(1) instead of scanning the graph.
+  private allCache?: Element[]
+  private parentIndex?: Map<Key, Element[]>
+  private invalidate(): void { this.allCache = undefined; this.parentIndex = undefined }
   onChange: () => void = () => {}
   ingest(elements: Element[]): void {
+    this.invalidate()
     for (const raw of elements) {
       const e: Element = { type: raw.type, id: raw.id, version: raw.version, tags: { ...raw.tags } }
       if (e.type === 'node') { e.lon = raw.lon; e.lat = raw.lat }
@@ -59,10 +65,14 @@ export class EditGraph {
     if (!e) throw new Error(`Required OSM data is missing: ${key}`)
     return e
   }
-  all(): Element[] { return [...new Set([...Object.keys(this.base), ...Object.keys(this.state.overrides)])].flatMap(k => this.get(k as Key) ?? []) }
-  put(e: Element): void { this.state.overrides[keyOf(e)] = clone(e) }
+  all(): Element[] {
+    this.allCache ??= [...new Set([...Object.keys(this.base), ...Object.keys(this.state.overrides)])].flatMap(k => this.get(k as Key) ?? [])
+    return this.allCache
+  }
+  put(e: Element): void { this.state.overrides[keyOf(e)] = clone(e); this.invalidate() }
   update(key: Key, fn: (e: Element) => void): void { const e = clone(this.require(key)); fn(e); this.put(e) }
-  remove(key: Key): void { this.state.overrides[key] = null }
+  remove(key: Key): void { this.state.overrides[key] = null; this.invalidate() }
+  private setState(state: State): void { this.state = state; this.invalidate() }
   create(type: OsmType, data: Partial<Element>): Element {
     const e = { ...data, type, id: this.state.nextId--, tags: data.tags ?? {} } as Element
     if (type === 'node') { e.lon = precision(e.lon!); e.lat = precision(e.lat!) }
@@ -82,23 +92,25 @@ export class EditGraph {
         this.future = []
         this.onChange()
       }
-    } catch (error) { this.state = before; throw error }
+    } catch (error) { this.setState(before); throw error }
   }
   get undoLabel(): string | undefined { return this.past[this.past.length - 1]?.label }
   get redoLabel(): string | undefined { return this.future[this.future.length - 1]?.label }
-  undo(): void { const h = this.past.pop(); if (h) { this.future.push(h); this.state = clone(h.before); this.onChange() } }
-  redo(): void { const h = this.future.pop(); if (h) { this.past.push(h); this.state = clone(h.after); this.onChange() } }
-  discard(): void { this.state = { overrides: {}, nextId: -1 }; this.past = []; this.future = []; this.onChange() }
+  undo(): void { const h = this.past.pop(); if (h) { this.future.push(h); this.setState(clone(h.before)); this.onChange() } }
+  redo(): void { const h = this.future.pop(); if (h) { this.past.push(h); this.setState(clone(h.after)); this.onChange() } }
+  discard(): void { this.setState({ overrides: {}, nextId: -1 }); this.past = []; this.future = []; this.onChange() }
+  /** Drop everything, including downloaded originals. */
+  reset(): void { this.base = {}; this.discard() }
   serialize(): string { return JSON.stringify({ format: 1, base: this.base, state: this.state, past: this.past, future: this.future }) }
   restore(text: string): void {
     const data = JSON.parse(text)
     if (data.format !== 1 || !data.base || !data.state || !Array.isArray(data.past) || !Array.isArray(data.future)) throw new Error('Unsupported or damaged draft')
     const previous = this.serialize()
     try {
-      this.base = data.base; this.state = data.state; this.past = data.past; this.future = data.future
+      this.base = data.base; this.setState(data.state); this.past = data.past; this.future = data.future
       if (this.validate().length) throw new Error('Draft contains invalid or missing geometry')
     } catch (error) {
-      const old = JSON.parse(previous); this.base = old.base; this.state = old.state; this.past = old.past; this.future = old.future; throw error
+      const old = JSON.parse(previous); this.base = old.base; this.setState(old.state); this.past = old.past; this.future = old.future; throw error
     }
     this.onChange()
   }
@@ -110,9 +122,27 @@ export class EditGraph {
     })
   }
   parents(key: Key): Element[] {
-    const child = this.require(key)
-    return this.all().filter(e => e.type === 'way' && child.type === 'node' && e.nodes?.includes(child.id) ||
-      e.type === 'relation' && e.members?.some(m => m.type === child.type && m.ref === child.id))
+    this.require(key)
+    if (!this.parentIndex) {
+      const index = new Map<Key, Element[]>()
+      const add = (child: Key, parent: Element) => {
+        const list = index.get(child)
+        if (!list) index.set(child, [parent])
+        else if (list[list.length - 1] !== parent) list.push(parent)
+      }
+      for (const e of this.all()) {
+        if (e.type === 'way') for (const id of e.nodes ?? []) add(`node/${id}`, e)
+        if (e.type === 'relation') for (const m of e.members ?? []) add(`${m.type}/${m.ref}`, e)
+      }
+      this.parentIndex = index
+    }
+    return [...(this.parentIndex.get(key) ?? [])]
+  }
+  /** Parents the element had in the downloaded OSM data, before local edits. */
+  private baseParents(key: Key): Key[] {
+    const [type, id] = [key.split('/')[0], Number(key.split('/')[1])]
+    return Object.values(this.base).filter(e => e.type === 'way' && type === 'node' && e.nodes?.includes(id) ||
+      e.type === 'relation' && e.members?.some(m => m.type === type && m.ref === id)).map(keyOf)
   }
   sectors(route: Key): Element[] { return this.parents(route).filter(e => groupKind(e) === 'sector') }
   areas(key: Key): Element[] { return this.parents(key).filter(e => groupKind(e) === 'area') }
@@ -300,14 +330,23 @@ export class EditGraph {
       if (e.type === 'way' && e.nodes?.some(id => this.state.overrides[`node/${id}`] === null)) issues.push(`Deleted node still used by ${keyOf(e)}`)
       if (e.type === 'relation' && e.members?.some(m => this.state.overrides[`${m.type}/${m.ref}`] === null)) issues.push(`Deleted member still used by ${keyOf(e)}`)
       if (fatherKind(e)) {
+        // Only block conflicts this session introduced. Objects that already have
+        // several parents in OSM stay editable; warnings() still reports them.
         const parents = this.parentGroups(keyOf(e))
-        if (parents.length > 1 && (changed.has(keyOf(e)) || parents.some(p => changed.has(keyOf(p))))) issues.push(`Conflicting parents for ${keyOf(e)}. Choose one parent before export.`)
+        if (parents.length > 1 && parents.some(p => changed.has(keyOf(p)))) {
+          const original = new Set(this.baseParents(keyOf(e)))
+          if (parents.some(p => !original.has(keyOf(p)))) issues.push(`Conflicting parents for ${keyOf(e)}. Choose one parent before export.`)
+        }
       }
     }
     return [...new Set(issues)]
   }
   warnings(): string[] {
     const warnings = new Set<string>(), changed = new Set(this.changes().filter(c => c.after).map(c => c.key)), all = this.all()
+    for (const e of all.filter(e => changed.has(keyOf(e)) && fatherKind(e))) {
+      const parents = this.parentGroups(keyOf(e))
+      if (parents.length > 1) warnings.add(`${keyOf(e)} belongs to several ${fatherKind(e) === 'sector' ? 'boulders' : 'areas'} (${parents.map(keyOf).join(', ')}). Consider choosing one.`)
+    }
     for (const e of all.filter(e => changed.has(keyOf(e)))) for (const other of all) {
       if (keyOf(e) === keyOf(other)) continue
       if (isRoute(e) && isRoute(other) && e.lon === other.lon && e.lat === other.lat)

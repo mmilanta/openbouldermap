@@ -9,8 +9,9 @@
 
 import { parsePath, renderPhotoBlock, wikimediaUrl } from './photos'
 import { gradesFromTags, gradeLabel, routeGradeColor, type Grade } from './grades'
-import { groupLabelFor, loadHierarchy, type Area, type Hierarchy, type Problem, type Sector } from './hierarchy'
+import { groupLabelFor, isHierarchyLoaded, loadHierarchy, type Area, type Hierarchy, type Problem, type Sector } from './hierarchy'
 import { selectRoute } from './selection'
+import { safeExternalUrl } from './urls'
 
 function el(tag: string, cls: string, html: string): HTMLElement {
   const n = document.createElement(tag)
@@ -58,7 +59,12 @@ export function setNavigator(fn: (lon: number, lat: number, zoom: number) => voi
   navigator = fn
 }
 
+// Every open/close bumps this token, so a slow index load never reopens the
+// sidebar after it was closed or replaced by a newer selection.
+let requestToken = 0
+
 export function hideSidebar(): void {
+  requestToken++
   selectRoute(undefined)
   sidebarEl.classList.add('hidden')
 }
@@ -333,19 +339,36 @@ function renderProblem(hierarchy: Hierarchy, problem: Problem): void {
   if (problem.fa) nodes.push(row('First ascent', problem.fa))
   if (problem.length) nodes.push(row('Length', `${problem.length} m`))
 
-  const links: string[] = []
-  if (problem.url) links.push(`<a href="${problem.url}" target="_blank" rel="noopener">external link</a>`)
+  // OSM tag values are untrusted: build links through the DOM and only accept
+  // http(s) URLs, never interpolating them into HTML.
+  const links: HTMLAnchorElement[] = []
+  const externalUrl = safeExternalUrl(problem.url)
+  if (externalUrl) links.push(link(externalUrl, 'external link'))
   if (problem.image) {
     const href = problem.image.startsWith('File:')
       ? `https://commons.wikimedia.org/wiki/${encodeURIComponent(problem.image)}`
       : wikimediaUrl(problem.image)
-    links.push(`<a href="${href}" target="_blank" rel="noopener">image (Wikimedia)</a>`)
+    links.push(link(href, 'image (Wikimedia)'))
   }
-  links.push(`<a href="${osmPermalink(problem.lat, problem.lon)}" target="_blank" rel="noopener">view on OSM</a>`)
-  links.push(`<a href="${osmEditLink(problem.lat, problem.lon)}" target="_blank" rel="noopener">edit in iD</a>`)
-  nodes.push(el('div', 'links', links.join(' · ')))
+  links.push(link(osmPermalink(problem.lat, problem.lon), 'view on OSM'))
+  links.push(link(osmEditLink(problem.lat, problem.lon), 'edit in iD'))
+  const linkRow = el('div', 'links', '')
+  links.forEach((a, index) => {
+    if (index > 0) linkRow.append(' · ')
+    linkRow.append(a)
+  })
+  nodes.push(linkRow)
 
   render(nodes)
+}
+
+function link(href: string, label: string): HTMLAnchorElement {
+  const a = document.createElement('a')
+  a.href = href
+  a.target = '_blank'
+  a.rel = 'noopener noreferrer'
+  a.textContent = label
+  return a
 }
 
 function render(nodes: HTMLElement[]): void {
@@ -361,26 +384,61 @@ function startStart(s: string): string {
 
 // ---- public entry points -------------------------------------------
 
+/**
+ * Load the index for a panel, showing progress on the first (slow) load and an
+ * error with a retry button if it fails. Resolves to undefined when the request
+ * was superseded or failed.
+ */
+async function hierarchyFor(retry: () => void): Promise<Hierarchy | undefined> {
+  const token = ++requestToken
+  if (!isHierarchyLoaded()) render([txt('p', 'muted panel-loading', 'Loading climbing data…')])
+  try {
+    const hierarchy = await loadHierarchy()
+    return token === requestToken ? hierarchy : undefined
+  } catch (error) {
+    if (token !== requestToken) return undefined
+    const retryButton = document.createElement('button')
+    retryButton.type = 'button'
+    retryButton.className = 'panel-retry'
+    retryButton.textContent = 'Retry'
+    retryButton.addEventListener('click', retry)
+    render([
+      txt('h1', 'route-name', 'Could not load climbing data'),
+      txt('p', 'muted', `Check your connection and try again. (${error instanceof Error ? error.message : String(error)})`),
+      retryButton
+    ])
+    return undefined
+  }
+}
+
+// Do not leave a loading placeholder behind for ids missing from the snapshot.
+function notFound(): void {
+  if (contentEl.querySelector('.panel-loading')) hideSidebar()
+}
+
 export async function openArea(id: number, fly = false): Promise<void> {
-  const hierarchy = await loadHierarchy()
+  const hierarchy = await hierarchyFor(() => void openArea(id, fly))
+  if (!hierarchy) return
   const area = hierarchy.areaById.get(id)
-  if (!area) return
+  if (!area) return notFound()
   if (fly && area.lon !== null && area.lat !== null) navigator?.(area.lon, area.lat, areaZoom(area.band))
   renderArea(hierarchy, area)
 }
 
 export async function openBoulder(id: number, fly = false): Promise<void> {
-  const hierarchy = await loadHierarchy()
+  const hierarchy = await hierarchyFor(() => void openBoulder(id, fly))
+  if (!hierarchy) return
   const sector = hierarchy.sectorById.get(id)
-  if (!sector) return
+  if (!sector) return notFound()
   if (fly && sector.lon !== null && sector.lat !== null) navigator?.(sector.lon, sector.lat, BOULDER_ZOOM)
   renderBoulder(hierarchy, sector)
 }
 
 export async function openProblem(id: number, fly = false): Promise<void> {
-  const hierarchy = await loadHierarchy()
+  const hierarchy = await hierarchyFor(() => void openProblem(id, fly))
+  if (!hierarchy) return
   const index = hierarchy.problemById.get(id)
-  if (index === undefined) return
+  if (index === undefined) return notFound()
   const problem = hierarchy.problems[index]
   selectRoute(problem.id)
   if (fly) navigator?.(problem.lon, problem.lat, PROBLEM_ZOOM)

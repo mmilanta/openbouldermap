@@ -177,6 +177,10 @@ export function parseHierarchy(raw: RawIndex): Hierarchy {
 let hierarchy: Hierarchy | undefined
 let loadPromise: Promise<Hierarchy> | undefined
 
+export function isHierarchyLoaded(): boolean {
+  return hierarchy !== undefined
+}
+
 export function loadHierarchy(): Promise<Hierarchy> {
   if (hierarchy) return Promise.resolve(hierarchy)
   if (!loadPromise) {

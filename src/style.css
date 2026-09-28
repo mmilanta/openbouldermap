@@ -749,3 +749,25 @@ body {
 .editor-grade { display: flex; gap: 8px; }
 .editor-grade-system { flex: 0 0 auto; width: auto; }
 .editor-grade-value { flex: 1 1 auto; width: auto; min-width: 0; }
+
+/* ---- viewer loading / error states ---- */
+.panel-retry {
+  margin-top: 12px; padding: 7px 12px; border: 1px solid var(--line-strong);
+  background: var(--paper); color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+}
+.panel-retry:hover { background: var(--panel); }
+
+/* ---- editor status line ---- */
+.editor-status {
+  position: absolute; left: 16px; top: 60px; z-index: 19;
+  display: flex; align-items: flex-start; gap: 8px;
+  max-width: min(520px, calc(100vw - 420px)); padding: 8px 10px;
+  background: var(--paper); color: var(--text); border: 1px solid var(--line-strong);
+  box-shadow: 0 2px 10px rgba(20, 34, 46, 0.15); font-size: 13px; line-height: 1.4;
+}
+.editor-status[hidden] { display: none; }
+.editor-status.warning { color: var(--danger); background: #fbeaea; border-color: var(--danger); }
+.editor-status-text { flex: 1; }
+.editor-status-close {
+  border: 0; background: none; color: inherit; font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px;
+}

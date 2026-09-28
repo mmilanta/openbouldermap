@@ -51,7 +51,8 @@ try {
   await page.waitForFunction(() => window.__map?.getLayer('edit-vertices'))
   const clickTool = label => page.locator('.geometry-toolbar').getByRole('button', { name: label, exact: true }).click()
   const features = () => page.evaluate(() => window.__map.getSource('edit-features').serialize().data.features)
-  const graphDraft = () => page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem('openbouldermap.editor.v1')).graph))
+  // Draft saves are debounced (300 ms); wait for the pending save before reading it.
+  const graphDraft = async () => { await page.waitForTimeout(400); return page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem('openbouldermap.editor.v1')).graph)) }
   const until = async fn => { for (let i = 0; i < 100; i++) { if (await fn()) return; await page.waitForTimeout(50) } throw new Error('Condition timed out') }
   const drag = async (x, y, tx, ty) => { await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(tx, ty, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(150) }
   const contextAction = async (x, y, label) => {
@@ -84,6 +85,8 @@ try {
 
   // Draw a rock (physical outline) and reshape it.
   await clickTool('+ Rock')
+  // Status messages are visible (they used to be discarded).
+  await page.locator('.editor-status', { hasText: 'Click perimeter corners' }).waitFor()
   for (const [x, y] of [[350, 300], [500, 300], [500, 450], [350, 450]]) await page.mouse.click(x, y)
   await page.mouse.click(350, 300) // Close by clicking the starting vertex again.
   await page.getByRole('heading', { name: 'Edit rock', exact: true }).waitFor()

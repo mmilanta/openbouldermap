@@ -2,7 +2,6 @@
 import type { Map as LibreMap } from 'maplibre-gl'
 import { BASE_URL, EDIT_PATH } from './config'
 import { isEditMode } from './editMode'
-import { setLocalRouteEdits } from './localEdits'
 import { loadSearchIndex, matchPlaces, type PlaceEntry } from './searchIndex'
 import { parsePath, renderPhotoBlock } from './photos'
 import { createPathEditor, stringifyPath } from './editing/photoPath'
@@ -14,12 +13,6 @@ import { MapContextMenu, type ContextAction } from './editing/context-menu'
 
 const graph = new EditGraph()
 const reader = new OsmReader(graph)
-// The viewer renders route lists through a no-op resolver; install the real
-// one so in-memory edits show up there while the editor is loaded.
-setLocalRouteEdits(props => {
-  const e = graph.get(`node/${Number(props.osm_id)}`)
-  return e ? { ...props, ...e.tags } : props
-})
 const sidebar = document.getElementById('sidebar')!
 const content = document.getElementById('sidebar-content')!
 const DRAFT_KEY = 'openbouldermap.editor.v1'
@@ -42,23 +35,54 @@ function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', classNam
 function button(text: string, action: () => void, className = ''): HTMLButtonElement {
   const b = node('button', text, `editor-action ${className}`); b.type = 'button'; b.addEventListener('click', action); return b
 }
-function message(_text: string): void { syncToolbar() }
+// Status line under the toolbar. Warnings stay until replaced or dismissed;
+// informational hints fade on their own.
+let statusBar: HTMLElement | undefined
+let statusTimer: ReturnType<typeof setTimeout> | undefined
+function message(text: string, tone: 'info' | 'warning' = 'info'): void {
+  syncToolbar()
+  if (!statusBar) {
+    if (!isEditMode()) return
+    statusBar = node('div', '', 'editor-status')
+    statusBar.setAttribute('role', 'status'); statusBar.setAttribute('aria-live', 'polite')
+    const textEl = node('span', '', 'editor-status-text')
+    const close = node('button', '×', 'editor-status-close'); close.type = 'button'; close.title = 'Dismiss'; close.setAttribute('aria-label', 'Dismiss message')
+    close.addEventListener('click', () => { statusBar!.hidden = true })
+    statusBar.append(textEl, close)
+    document.getElementById('app')!.append(statusBar)
+  }
+  clearTimeout(statusTimer)
+  statusBar.querySelector('.editor-status-text')!.textContent = text
+  statusBar.classList.toggle('warning', tone === 'warning')
+  statusBar.hidden = !text
+  if (text && tone === 'info') statusTimer = setTimeout(() => { if (statusBar) statusBar.hidden = true }, 8000)
+}
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error) }
 async function run(action: () => Promise<void> | void): Promise<boolean> {
-  if (busy) return false
+  if (busy) { message('Still loading data from OpenStreetMap for the previous action. Try again in a moment.'); return false }
   busy = true; syncToolbar(); content.inert = true
   try { await action(); return true }
-  catch (error) { message(errorMessage(error)); window.alert(errorMessage(error)); return false }
+  catch (error) { message(errorMessage(error), 'warning'); window.alert(errorMessage(error)); return false }
   finally { busy = false; content.inert = false; syncToolbar(); editingMap?.render() }
 }
+// Serializing the whole draft on every keystroke is wasteful; coalesce saves and
+// flush them before the page goes away.
+let saveTimer: ReturnType<typeof setTimeout> | undefined
 function saveDraft(): void {
+  clearTimeout(saveTimer); saveTimer = undefined
   try {
     if (graph.changes().length) localStorage.setItem(DRAFT_KEY, JSON.stringify({ graph: graph.serialize(), references: reader.serializeReferences() }))
     else localStorage.removeItem(DRAFT_KEY)
+    if (!draftSaved) message('Draft saved in this browser again.')
     draftSaved = true
-  } catch { draftSaved = false; message('Draft could not be saved in this browser. Export before leaving, or discard your changes.') }
+  } catch {
+    if (draftSaved) message('Your draft could not be saved in this browser (storage full or unavailable). Download the .osc before leaving, or your changes will be lost.', 'warning')
+    draftSaved = false
+  }
 }
-graph.onChange = () => { editingMap?.render(); syncToolbar(); saveDraft() }
+function scheduleSave(): void { clearTimeout(saveTimer); saveTimer = setTimeout(saveDraft, 300) }
+function flushSave(): void { if (saveTimer !== undefined) saveDraft() }
+graph.onChange = () => { editingMap?.render(); syncToolbar(); scheduleSave() }
 
 function setEditorBackground(map: LibreMap, background: EditorBackground): void {
   // The map may still be parsing its style when the editor chunk loads.
@@ -93,8 +117,10 @@ export function initEditorButton(map: LibreMap): void {
       const discarded = await run(async () => {
         await visibleLoad?.catch(() => {})
         // Remove the recoverable copy before throwing away the in-memory edits.
+        clearTimeout(saveTimer); saveTimer = undefined
         localStorage.removeItem(DRAFT_KEY)
-        contextMenu?.close(); editingMap?.cancel(); graph.discard(); graph.base = {}
+        contextMenu?.close(); editingMap?.cancel(); graph.reset()
+        clearTimeout(saveTimer); saveTimer = undefined // reset() schedules a save; drop it.
         reader.reset(); visibleLoaded.clear(); visibleFailed.clear(); selected = undefined
         editingMap?.select(undefined)
       })
@@ -155,8 +181,11 @@ export function initEditorButton(map: LibreMap): void {
         message('Draft restored. Original OSM versions will be checked before export. Nothing has been published.')
       } else localStorage.removeItem(DRAFT_KEY)
     }
-  } catch (error) { draftSaved = false; message(`Could not restore draft: ${errorMessage(error)}. Use ✕ to discard the draft and leave edit mode.`) }
+  } catch (error) { draftSaved = false; message(`Could not restore draft: ${errorMessage(error)}. Use ✕ to discard the draft and leave edit mode.`, 'warning') }
+  window.addEventListener('pagehide', flushSave)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave() })
   window.addEventListener('beforeunload', event => {
+    flushSave()
     if ((!draftSaved && graph.changes().length) || busy || editingMap?.drawing.length || document.querySelector('dialog[open] details[open], .editor-backdrop')) { event.preventDefault(); event.returnValue = '' }
   })
   window.addEventListener('keydown', event => {
@@ -194,7 +223,7 @@ export function initEditorMap(map: LibreMap): void {
   editingMap = new EditingMap(map, graph, {
     canInteract: () => !busy && !document.querySelector('dialog[open], .editor-backdrop'),
     message,
-    loadVisible: () => { void loadVisible().catch(error => message(`Could not load snapping geometry: ${errorMessage(error)}. Select a boulder to retry.`)) },
+    loadVisible: () => { void loadVisible().catch(error => message(`Could not load snapping geometry: ${errorMessage(error)}. Select a boulder to retry.`, 'warning')) },
     select: key => void select(key),
     context: target => openObjectMenu(target),
     dismissContext: () => contextMenu?.close(),
@@ -283,20 +312,42 @@ function openObjectMenu(target: ContextTarget): void {
   }).then(success => { if (!success && contextMenu?.isOpen(token)) contextMenu.close() })
 }
 
+// Snapping needs the live geometry of nearby rocks. Only load it when a route is
+// being placed or dragged, only when zoomed in far enough for snapping to be
+// meaningful, and only for a bounded number of the rocks nearest the centre, to
+// keep the number of OSM API requests low.
+const SNAP_LOAD_MIN_ZOOM = 16
+const SNAP_LOAD_LIMIT = 20
+const SNAP_LOAD_CONCURRENCY = 3
 async function loadVisible(): Promise<void> {
   if (!editingMap || !editingMap.map.getLayer('edit-vertices')) return
   if (visibleLoad) return visibleLoad
   const map = editingMap.map
-  // Only load physical boulders currently visible. Relations are loaded in full,
-  // including ring nodes, before being offered as snap targets.
-  const keys = [...new Set(map.queryRenderedFeatures({ layers: ['boulder', 'boulder-label'] }).map(f => `${f.properties.osm_type}/${f.properties.osm_id}` as Key))].filter(k => /^(way|relation)\/\d+$/.test(k) && !visibleLoaded.has(k) && !visibleFailed.has(k))
+  if (map.getZoom() < SNAP_LOAD_MIN_ZOOM) return
+  const center = map.project(map.getCenter())
+  const distance = (f: { geometry: GeoJSON.Geometry }) => {
+    const g = f.geometry, p = g.type === 'Point' ? g.coordinates : g.type === 'Polygon' ? g.coordinates[0][0] : g.type === 'MultiPolygon' ? g.coordinates[0][0][0] : undefined
+    if (!p) return Infinity
+    const q = map.project(p as [number, number]); return Math.hypot(q.x - center.x, q.y - center.y)
+  }
+  const nearest = new Map<Key, number>()
+  for (const f of map.queryRenderedFeatures({ layers: ['boulder', 'boulder-label'] })) {
+    const key = `${f.properties.osm_type}/${f.properties.osm_id}` as Key
+    if (!/^(way|relation)\/\d+$/.test(key) || visibleLoaded.has(key) || visibleFailed.has(key)) continue
+    const d = distance(f); if (d < (nearest.get(key) ?? Infinity)) nearest.set(key, d)
+  }
+  const keys = [...nearest].sort((a, b) => a[1] - b[1]).slice(0, SNAP_LOAD_LIMIT).map(([key]) => key)
   if (!keys.length) return
   visibleLoad = (async () => {
     const failures: string[] = []
-    for (const key of keys) {
-      try { await reader.select(key); visibleLoaded.add(key) }
-      catch (error) { visibleFailed.add(key); failures.push(`${key}: ${errorMessage(error)}`) }
-    }
+    let next = 0
+    await Promise.all(Array.from({ length: Math.min(SNAP_LOAD_CONCURRENCY, keys.length) }, async () => {
+      while (next < keys.length) {
+        const key = keys[next++]
+        try { await reader.select(key); visibleLoaded.add(key) }
+        catch (error) { visibleFailed.add(key); failures.push(`${key}: ${errorMessage(error)}`) }
+      }
+    }))
     editingMap?.render()
     if (failures.length) throw new Error(failures.join('\n'))
   })()
@@ -328,12 +379,6 @@ async function select(key: Key): Promise<void> {
 function selectLocal(key: Key): void {
   selected = key; editingMap?.setTool('select'); editingMap?.select(key); renderSelected()
   message(`${key} · Local changes only. Drag selected vertices; Alt disables snapping. Detach routes before independent movement.`)
-}
-export function showRouteEditor(props: Record<string, any>, _lon: number, _lat: number): void {
-  void select(`${props.osm_type ?? 'node'}/${Number(props.osm_id)}` as Key)
-}
-export function showBoulderEditor(props: Record<string, any>, _lon: number, _lat: number): void {
-  void select(`${props.osm_type ?? 'way'}/${Number(props.osm_id)}` as Key)
 }
 function beginPanel(title: string): void { content.replaceChildren(node('h1', title, 'route-name')); sidebar.classList.remove('hidden') }
 function textField(parent: HTMLElement, label: string, value: string, onChange: (value: string) => void, multiline = false): HTMLInputElement | HTMLTextAreaElement {

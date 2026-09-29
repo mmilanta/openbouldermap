@@ -16,8 +16,6 @@ const reader = new OsmReader(graph)
 const sidebar = document.getElementById('sidebar')!
 const content = document.getElementById('sidebar-content')!
 const DRAFT_KEY = 'openbouldermap.editor.v1'
-const BACKGROUND_KEY = 'openbouldermap.editor.background'
-type EditorBackground = 'map' | 'satellite'
 let editingMap: EditingMap | undefined
 let selected: Key | undefined
 let busy = false
@@ -84,19 +82,6 @@ function scheduleSave(): void { clearTimeout(saveTimer); saveTimer = setTimeout(
 function flushSave(): void { if (saveTimer !== undefined) saveDraft() }
 graph.onChange = () => { editingMap?.render(); syncToolbar(); scheduleSave() }
 
-function setEditorBackground(map: LibreMap, background: EditorBackground): void {
-  // The map may still be parsing its style when the editor chunk loads.
-  if (!map.isStyleLoaded()) return
-  // The OpenFreeMap basemap is a group of vector layers; toggle them together.
-  for (const layer of map.getStyle().layers) {
-    if (!layer.id.startsWith('basemap-')) continue
-    map.setLayoutProperty(layer.id, 'visibility', background === 'map' ? 'visible' : 'none')
-  }
-  if (map.getLayer('satellite-raster')) map.setLayoutProperty('satellite-raster', 'visibility', background === 'satellite' ? 'visible' : 'none')
-  const satelliteAttribution = document.getElementById('satellite-attribution')
-  if (satelliteAttribution) satelliteAttribution.hidden = background !== 'satellite'
-}
-
 export function initEditorButton(map: LibreMap): void {
   const toggle = document.getElementById('edit-toggle') as HTMLButtonElement
   const exportButton = document.getElementById('osc-toggle') as HTMLButtonElement
@@ -130,25 +115,6 @@ export function initEditorButton(map: LibreMap): void {
   })
   exportButton.addEventListener('click', showReview)
   if (!editing) return
-
-  const backgroundLabel = node('label', '', 'editor-background')
-  const background = node('select', '', 'editor-background-select')
-  background.setAttribute('aria-label', 'Map background')
-  for (const [value, label] of [['map', 'Street map'], ['satellite', 'Satellite imagery']] as const) {
-    const option = node('option', label); option.value = value; background.append(option)
-  }
-  try { background.value = localStorage.getItem(BACKGROUND_KEY) === 'satellite' ? 'satellite' : 'map' } catch { background.value = 'map' }
-  const applyBackground = () => setEditorBackground(map, background.value as EditorBackground)
-  background.addEventListener('change', () => {
-    applyBackground()
-    try { localStorage.setItem(BACKGROUND_KEY, background.value) } catch { /* The control still works without persistence. */ }
-  })
-  backgroundLabel.append(background)
-  document.getElementById('editor-controls')!.insertBefore(backgroundLabel, toggle)
-  // The persisted choice is read before MapLibre necessarily has its style
-  // layers. Apply it now for attribution, then again once the map is ready.
-  applyBackground()
-  if (!map.isStyleLoaded()) map.once('load', applyBackground)
 
   contextMenu = new MapContextMenu()
   toolbar = node('div', '', 'geometry-toolbar')

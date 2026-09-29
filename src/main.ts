@@ -7,6 +7,7 @@ import { openArea, openBoulder, openProblem, hideSidebar, setNavigator } from '.
 import { isEditMode } from './editMode'
 import { initSearch } from './search'
 import { setSelectionMap } from './selection'
+import { initBackgroundControl } from './background'
 
 // Register the pmtiles:// protocol so MapLibre can read our static archive.
 const protocol = new Protocol({ metadata: true })
@@ -48,6 +49,7 @@ async function start(): Promise<void> {
   })
 
   setSelectionMap(map)
+  initBackgroundControl(map)
 
   // The update date belongs in the attribution bar rather than in a separate
   // map control.

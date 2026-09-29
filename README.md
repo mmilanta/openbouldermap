@@ -10,9 +10,13 @@ hand-written guide to the data model, grades and mapping workflow. Its static
 HTML/CSS sources live in [`public/wiki/`](public/wiki/) and are copied verbatim
 into `dist/wiki/` by the Vite build.
 
-- **Basemap**: vector tiles from [OpenFreeMap](https://openfreemap.org/) (free, no API key).
+- **Basemap**: the full Liberty style from [OpenFreeMap](https://openfreemap.org/) (free, no API key).
 - **Climbing features**: tiny self-hosted PMTiles (boulders + routes only, a few MB globally).
 - **Frontend**: Vite + TypeScript + MapLibre GL JS, reading climbing PMTiles via the `pmtiles` protocol.
+
+Use the bottom-left background selector to switch between **Street map** and
+**Satellite imagery** (Esri) in both the viewer and editor. Climbing features
+remain visible, and the browser remembers your choice across both views.
 
 See [`requirements.md`](requirements.md) for the original spec and
 [`idea.md`](idea.md) for the brainstorm.
@@ -55,10 +59,16 @@ npm run dev        # http://localhost:5173
 1. **`scripts/build-climbing-tiles.sh`** filters the OSM PBF with `osmium tags-filter … climbing`, keeping only objects with any `climbing` tag. The filtered PBF is tiny (a few MB).
 2. The script also runs **`scripts/build-hierarchy.py`**, which derives the area tree (with ranks), the rock↔boulder links and each boulder's problems, then writes `data/sectors.geojson` (area/boulder label points), `data/boulders.geojson` (physical rock geometry, tagged with its boulder) and `tiles/climbing-index.json` (the viewer's hierarchy + route data).
 3. Planetiler processes the filtered PBF + those GeoJSON inputs with `scripts/schema.yml` (`areas`, `sectors`, `boulders`, `boulder_points`, and `routes` layers) and writes `tiles/climbing.pmtiles`.
-4. The frontend loads **two vector sources**:
-   - `basemap` — OpenFreeMap vector tiles, resolved through its TileJSON (`https://tiles.openfreemap.org/planet`); free, keyless, no usage limits
+4. The frontend combines the bundled OpenFreeMap Liberty style with climbing tiles:
+   - `openmaptiles` — OpenFreeMap vector tiles, resolved through its TileJSON (`https://tiles.openfreemap.org/planet`); free, keyless, no usage limits
    - `climbing` — `pmtiles://…/tiles/climbing.pmtiles` (local static file)
-   The basemap style is built in `src/style.ts` (light OpenMapTiles layers prefixed `basemap-`); the editor can switch the whole group off in favour of an Esri satellite raster.
+   Liberty also includes Natural Earth raster shading at low zooms, labels and POI sprites.
+   The official style is bundled in `src/basemaps/liberty.json` with its upstream
+   license in `src/basemaps/LICENSE.md`. `src/style.ts` prefixes its layers with
+   `basemap-` and appends the climbing overlay. The viewer and editor can switch
+   the entire basemap off in favour of an Esri satellite raster.
+   To refresh Liberty, download `https://tiles.openfreemap.org/styles/liberty`
+   into `src/basemaps/liberty.json`.
 5. MapLibre reveals one hierarchy level at a time. Area zoom bands are counted from the deepest existing level (deepest at z15–17, the level above at z13–15, and so on down), boulder names run z17–19, and problem names start at z19. Physical rocks (dimmed when not linked to a boulder) and grade-colored problem dots appear at z12/z13.
 6. Selecting an area shows its immediate sub-areas and boulders with counts; selecting a boulder shows its problems grouped by photo; selecting a problem opens its route detail. All of it reads `tiles/climbing-index.json` — the viewer never calls the live OSM API.
 

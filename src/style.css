@@ -469,7 +469,7 @@ body {
 }
 .editor-controls [hidden] { display: none !important; }
 
-.editor-background {
+.map-background {
   position: fixed;
   left: 10px;
   bottom: 56px;
@@ -485,7 +485,7 @@ body {
   color: var(--text);
   font: 400 12px var(--font);
 }
-.editor-background-select {
+.map-background-select {
   max-width: 145px;
   border: 0;
   outline: 0;
@@ -494,7 +494,7 @@ body {
   font: inherit;
   cursor: pointer;
 }
-.editor-background-select:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.map-background-select:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 
 .edit-toggle {
   width: 36px;

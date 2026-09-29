@@ -9,14 +9,8 @@ export const INITIAL_VIEW = {
   maxZoom: 22
 }
 
-// Basemap: OpenFreeMap vector tiles (free, no API key, no usage limits). The
-// TileJSON URL is used so MapLibre resolves the current versioned tile path.
-// https://openfreemap.org/
-export const BASEMAP_SOURCE_URL = 'https://tiles.openfreemap.org/planet'
-export const BASEMAP_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf'
-
-// Aerial imagery is offered as an editing aid. It is intentionally not the
-// default map: editors opt into it when tracing or checking rock geometry.
+// Optional aerial imagery in both the viewer and editor; street map is the
+// default background for browsers without a saved choice.
 export const SATELLITE_TILES =
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
 

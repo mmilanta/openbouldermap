@@ -4,6 +4,8 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { parseHierarchy } from '../src/hierarchy.ts'
+import { gradeLabel, gradesFromTags } from '../src/grades.ts'
 
 // A small OSM fragment exercising the consensus model:
 //   Göschenen (area) > Schöllenen (area) > Schöllenen Boulder (crag + rock)
@@ -23,12 +25,12 @@ const OPL = [
   'r300 v1 dV c1 t2020-01-01T00:00:00Z i1 uu Tclimbing=area,climbing:boulder=yes,name=Göschenen,type=site Mr100@,r200@'
 ].join('\n') + '\n'
 
-function build() {
+function build(opl = OPL) {
   const dir = mkdtempSync(join(tmpdir(), 'hierarchy-'))
   const sectors = join(dir, 'sectors.geojson')
   const boulders = join(dir, 'boulders.geojson')
   const index = join(dir, 'index.json')
-  const result = spawnSync('python3', ['scripts/build-hierarchy.py', sectors, boulders, index], { input: OPL, encoding: 'utf8' })
+  const result = spawnSync('python3', ['scripts/build-hierarchy.py', sectors, boulders, index], { input: opl, encoding: 'utf8' })
   assert.equal(result.status, 0, result.stderr)
   return {
     index: JSON.parse(readFileSync(index, 'utf8')),
@@ -61,6 +63,49 @@ test('nests areas, ranks them, and links crags to their problems', () => {
   const boulder = sectors.get(400)
   assert.equal(boulder[5], 'w/500', 'rock member is linked to the crag')
   assert.deepEqual(boulder[6], [1])
+})
+
+test('viewer index preserves other grade scales and legacy Commons photos', () => {
+  const { index } = build([
+    'n1 v1 Tclimbing=route_bottom,climbing:grade:uiaa=VI,climbing:grade:french=6a,image=File:Legacy.jpg x8 y46',
+    'n2 v1 Tclimbing=route_bottom,climbing:grade:font=6A,climbing:grade:hueco=V3,wikimedia_commons=File:Preferred.jpg,image=File:Legacy.jpg x8 y46'
+  ].join('\n'))
+  const hierarchy = parseHierarchy(index)
+  assert.equal(hierarchy.problems[0].image, 'File:Legacy.jpg')
+  assert.deepEqual(gradesFromTags(hierarchy.problems[0].grades).map(gradeLabel), ['UIAA VI', 'French 6a'])
+  assert.deepEqual(hierarchy.searchEntries[0].grades, hierarchy.problems[0].grades)
+  assert.equal(hierarchy.problems[1].image, 'File:Preferred.jpg')
+  assert.deepEqual(gradesFromTags(hierarchy.problems[1].grades).map(gradeLabel), ['V3', '6A'])
+})
+
+test('multipolygon holes stay with their containing outer ring', () => {
+  const lines: string[] = []
+  const rings = [
+    [[0, 0], [4, 0], [4, 4], [0, 4]],
+    [[10, 0], [14, 0], [14, 4], [10, 4]],
+    [[1, 1], [2, 1], [2, 2], [1, 2]],
+    [[11, 1], [12, 1], [12, 2], [11, 2]]
+  ]
+  rings.forEach((ring, i) => {
+    const ids = ring.map(([x, y], j) => {
+      const id = 100 + i * 10 + j
+      lines.push(`n${id} v1 T x${x} y${y}`)
+      return id
+    })
+    lines.push(`w${200 + i} v1 T N${[...ids, ids[0]].map(id => `n${id}`).join(',')}`)
+  })
+  lines.push('r300 v1 Ttype=multipolygon,climbing=boulder,natural=stone Mw200@outer,w201@outer,w202@inner,w203@inner')
+  const geometry = build(lines.join('\n')).boulders.features[0].geometry
+  assert.equal(geometry.type, 'MultiPolygon')
+  assert.deepEqual(geometry.coordinates.map((polygon: number[][][]) => polygon.length), [2, 2])
+  assert.deepEqual(geometry.coordinates[0][1], [...rings[2], rings[2][0]])
+  assert.deepEqual(geometry.coordinates[1][1], [...rings[3], rings[3][0]])
+
+  // Single-outer rocks must retain holes too.
+  lines[lines.length - 1] = 'r300 v1 Ttype=multipolygon,climbing=boulder,natural=stone Mw200@outer,w202@inner'
+  const single = build(lines.join('\n')).boulders.features[0].geometry
+  assert.equal(single.type, 'Polygon')
+  assert.equal(single.coordinates.length, 2)
 })
 
 test('emits ranked label points and physical-rock geometry', () => {

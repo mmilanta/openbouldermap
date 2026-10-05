@@ -70,10 +70,7 @@ export function hideSidebar(): void {
 }
 
 function problemProps(problem: Problem): Record<string, string> {
-  const props: Record<string, string> = { name: problem.name }
-  if (problem.font) props['climbing:grade:font'] = problem.font
-  if (problem.hueco) props['climbing:grade:hueco'] = problem.hueco
-  return props
+  return { name: problem.name, ...problem.grades }
 }
 
 function gradeChip(grade: Grade): HTMLElement {

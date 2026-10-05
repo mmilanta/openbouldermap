@@ -25,6 +25,7 @@ test('builds the area path and full problem context', () => {
   assert.equal(problem.name, 'Tremola')
   assert.equal(problem.font, '7B')
   assert.equal(problem.hueco, undefined)
+  assert.deepEqual(hierarchy.problems[0].grades, { 'climbing:grade:font': '7B' }, 'old snapshots remain compatible')
   assert.deepEqual(problem.path, ['Gottardo', 'Gotthard Bouldering'])
 
   const nested = hierarchy.searchEntries.find(entry => entry.id === 4)!

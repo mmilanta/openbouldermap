@@ -17,7 +17,7 @@ try {
     try { if ((await fetch(base)).ok) break } catch {}
     await new Promise(r => setTimeout(r, 100))
   }
-  browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) })
+  browser = await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) })
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true })
   page.on('pageerror', e => { errors.push(e.message); console.error(e) })
   if (process.env.DEBUG_EDITOR) page.on('console', m => console.log(m.type(), m.text()))
@@ -38,6 +38,7 @@ try {
     return route.fulfill({ contentType: 'application/x-protobuf', body: Buffer.alloc(0) })
   })
   await page.route('https://overpass-api.de/api/interpreter', r => { overpassRequests++; return r.fulfill({ json: { elements: [] } }) })
+  await page.route('https://commons.wikimedia.org/**', r => r.fulfill({ contentType: 'image/png', body: png }))
   page.on('request', request => {
     const path = new URL(request.url()).pathname
     if (/\/src\/editor|editor-[\w-]+\.js|\/src\/editing\//.test(path)) editorChunkRequests.push(path)
@@ -49,6 +50,35 @@ try {
   assert.deepEqual(editorChunkRequests, [], 'Viewer must not load the editor chunk')
   await page.goto(`${base}edit#19/0/0`)
   await page.waitForFunction(() => window.__map?.getLayer('edit-vertices'))
+  // Photo editor lifecycle: dotted styles survive viewing and saving, unrelated
+  // keys do not disable Escape, and closed editors leave no keyboard handlers.
+  await page.evaluate(async () => {
+    const { createPathEditor } = await import('/src/editing/photoPath.ts')
+    const { parsePath, renderPhotoBlock } = await import('/src/photos.ts')
+    window.photoTest = { canceled: 0, saved: undefined }
+    window.openPhotoTest = () => createPathEditor('File:Test.jpg', parsePath('0.1,0.2:|0.3,0.4|0.5,0.6'), {
+      onDone: points => { window.photoTest.saved = points },
+      onCancel: () => { window.photoTest.canceled++ }
+    })
+    const block = renderPhotoBlock('File:Test.jpg', [{ points: parsePath('0.1,0.2:|0.3,0.4|0.5,0.6'), color: '#f00' }])
+    block.id = 'photo-test-block'
+    document.body.append(block)
+    window.openPhotoTest()
+  })
+  await page.waitForFunction(() => document.querySelectorAll('.editor-svg polyline').length === 2)
+  assert.deepEqual(await page.locator('.editor-svg polyline').evaluateAll(lines => lines.map(line => line.hasAttribute('stroke-dasharray'))), [true, false])
+  await page.locator('.editor-done').click()
+  assert.deepEqual(await page.evaluate(() => window.photoTest.saved.map(p => p.dotted)), [false, true, false])
+  await page.waitForFunction(() => document.querySelectorAll('#photo-test-block .photo-route-stroke').length === 2)
+  assert.deepEqual(await page.locator('#photo-test-block .photo-route-stroke').evaluateAll(lines => lines.map(line => line.hasAttribute('stroke-dasharray'))), [true, false])
+  await page.evaluate(() => window.openPhotoTest())
+  await page.keyboard.press('a')
+  await page.keyboard.press('Escape')
+  assert.equal(await page.locator('.editor-backdrop').count(), 0)
+  assert.equal(await page.evaluate(() => window.photoTest.canceled), 1)
+  await page.keyboard.press('Escape')
+  assert.equal(await page.evaluate(() => window.photoTest.canceled), 1, 'closed editors must not receive Escape')
+  await page.evaluate(() => document.getElementById('photo-test-block').remove())
   const clickTool = label => page.locator('.geometry-toolbar').getByRole('button', { name: label, exact: true }).click()
   const features = () => page.evaluate(() => window.__map.getSource('edit-features').serialize().data.features)
   // Draft saves are debounced (300 ms); wait for the pending save before reading it.

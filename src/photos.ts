@@ -22,13 +22,14 @@ export function wikimediaUrl(filename: string, width = 800): string {
  */
 export function parsePath(str?: string | null): PathPoint[] {
   if (!str) return []
-  const segments = str.split('|').filter(Boolean)
+  const segments = str.split(/(:?\|)/).filter(Boolean)
   const points: PathPoint[] = []
+  let dotted = false
 
-  for (let i = 0; i < segments.length; i++) {
-    let seg = segments[i]
-    const dotted = seg.startsWith(':')
-    if (dotted) seg = seg.slice(1) // strip leading ':'
+  for (let seg of segments) {
+    if (seg === '|' || seg === ':|') { dotted = seg === ':|'; continue }
+    // Also accept the older |: spelling already handled by this parser.
+    if (seg.startsWith(':')) { dotted = true; seg = seg.slice(1) }
 
     const [xStr, yRaw = ''] = seg.split(',', 2)
     // Strip trailing non-numeric characters (bolt-type suffixes: b, a, s, p)
@@ -41,6 +42,17 @@ export function parsePath(str?: string | null): PathPoint[] {
     }
   }
   return points
+}
+
+/** Runs of segments with the same style, sharing endpoints at transitions. */
+export function pathSegments(points: PathPoint[]): Array<{ points: PathPoint[]; dotted: boolean }> {
+  const runs: Array<{ points: PathPoint[]; dotted: boolean }> = []
+  for (let i = 1; i < points.length; i++) {
+    const dotted = Boolean(points[i].dotted), last = runs[runs.length - 1]
+    if (last && last.dotted === dotted) last.points.push(points[i])
+    else runs.push({ points: [points[i - 1], points[i]], dotted })
+  }
+  return runs
 }
 
 /** Collect every wikimedia_commons*:path tag from a flat props bag. */
@@ -101,11 +113,8 @@ export function renderPhotoBlock(
       g.classList.add('photo-route-line')
       if (p.key) g.dataset.routeKey = p.key
 
-      // split path into solid and dotted segments
-      let current: PathPoint[] = []
-      const flush = (dotted: boolean) => {
-        if (current.length < 2) return
-        const d = current.map((pt, idx) =>
+      for (const run of pathSegments(p.points)) {
+        const d = run.points.map((pt, idx) =>
           `${idx === 0 ? 'M' : 'L'}${pt.x * w} ${pt.y * h}`
         ).join(' ')
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'path')
@@ -116,7 +125,7 @@ export function renderPhotoBlock(
         line.setAttribute('stroke-linejoin', 'round')
         line.setAttribute('fill', 'none')
         line.classList.add('photo-route-stroke')
-        if (dotted) line.setAttribute('stroke-dasharray', '8 6')
+        if (run.dotted) line.setAttribute('stroke-dasharray', '8 6')
 
         // A hidden copy becomes the white casing when this route is highlighted.
         const casing = line.cloneNode(true) as SVGPathElement
@@ -126,26 +135,6 @@ export function renderPhotoBlock(
         g.appendChild(casing)
         g.appendChild(line)
       }
-
-      for (let i = 0; i < p.points.length; i++) {
-        const pt = p.points[i]
-        if (i > 0 && pt.dotted && current.length >= 1) {
-          // close current segment, start dotted
-          current.push(pt)
-          flush(false)
-          // start new dotted segment from previous point
-          current = [p.points[i - 1], pt]
-        } else if (i > 0 && !pt.dotted && current.length >= 1 && p.points[i - 1]?.dotted) {
-          // dotted segment ends, flush it
-          current.push(pt)
-          flush(true)
-          // start new solid segment
-          current = [pt]
-        } else {
-          current.push(pt)
-        }
-      }
-      flush(current.some(pt => pt.dotted))
 
       svg.appendChild(g)
     }

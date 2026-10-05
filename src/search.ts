@@ -7,6 +7,7 @@
 import type { Map as LibreMap } from 'maplibre-gl'
 import { loadSearchIndex, normalize, type PlaceEntry } from './searchIndex'
 import { openArea, openBoulder, openProblem } from './sidebar'
+import { gradeLabel, gradesFromTags } from './grades'
 
 const MIN_QUERY = 2
 const MAX_RESULTS = 20
@@ -115,6 +116,7 @@ export function initSearch(map: LibreMap): void {
 
       button.append(kind, body)
       const grades = [entry.font, entry.hueco].filter((value): value is string => Boolean(value))
+      grades.push(...gradesFromTags(entry.grades ?? {}).filter(grade => !grade.nice).map(gradeLabel))
       if (grades.length) {
         const wrap = document.createElement('span')
         wrap.className = 'search-result-grades'

@@ -6,7 +6,7 @@ import { chromium } from 'playwright'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 
-const base = 'http://127.0.0.1:5198/'
+const base = process.env.SEARCH_TEST_URL || 'http://127.0.0.1:5198/'
 const server = process.env.SEARCH_TEST_URL ? undefined : spawn('node', ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5198', '--strictPort'], { stdio: 'pipe' })
 const errors = [], indexRequests = []
 let browser
@@ -50,7 +50,8 @@ try {
   const sectorName = sector.name
   const areaName = area.name
 
-  browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) })
+  // Use a consistent software renderer on headless machines without a GPU.
+  browser = await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) })
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   page.on('pageerror', e => { errors.push(e.message); console.error(e) })
   page.on('request', request => { if (request.url().includes('climbing-index.json')) indexRequests.push(request.url()) })
@@ -66,10 +67,18 @@ try {
     return route.fulfill({ contentType: 'application/x-protobuf', body: Buffer.alloc(0) })
   })
   await page.route('https://api.openstreetmap.org/**', r => r.fulfill({ json: { elements: [] } }))
+  await page.route('https://commons.wikimedia.org/**', r => r.fulfill({ contentType: 'image/png', body: png }))
+  // A stalled optional metadata request must not prevent map startup.
+  await page.route('**/tiles/climbing-metadata.json', () => {})
+  const legacyName = 'Regression legacy photo and UIAA grade'
+  await page.route('**/tiles/climbing-index.json', r => r.fulfill({ json: {
+    ...data,
+    problems: [...data.problems, [legacyName, 99999999999, -1, 8, 46, '', '', 'File:Legacy.jpg', '', '', '', '', '', '', { 'climbing:grade:uiaa': 'VI' }]]
+  } }))
 
   await page.goto(base)
   await page.waitForFunction(() => window.__map?.isStyleLoaded())
-  await page.waitForSelector('.search-input')
+  await page.waitForSelector('.search-input', { timeout: 8000 })
   assert.deepEqual(indexRequests, [], 'the hierarchy index must not load before interaction')
 
   const searchFor = async name => {
@@ -111,8 +120,16 @@ try {
   await (await searchFor(areaName)).click()
   await page.waitForFunction(name => document.querySelector('#sidebar h1')?.textContent?.includes(name), areaName)
 
+  const legacy = await searchFor(legacyName)
+  assert.deepEqual(await legacy.locator('.search-result-grade').allTextContents(), ['UIAA VI'])
+  await legacy.click()
+  await page.locator('#sidebar h1', { hasText: legacyName }).waitFor()
+  assert.equal(await page.locator('#sidebar .grade-chip').textContent(), 'UIAA VI')
+  await page.locator('#sidebar .photo-block:not(.loading) .photo-img').waitFor()
+  assert.ok((await page.locator('#sidebar .photo-img').getAttribute('src')).includes('Legacy.jpg'))
+
   assert.deepEqual(errors, [])
-  console.log('Search workflow passed: lazy index load, problem/boulder/area results, keyboard and click navigation.')
+  console.log('Search workflow passed: metadata timeout, lazy index, search/navigation, extra grades and legacy photos.')
 } finally {
   await browser?.close()
   server?.kill()

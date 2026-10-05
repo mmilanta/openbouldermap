@@ -26,7 +26,7 @@ async function start(): Promise<void> {
   let maxRank = 1
   let updated: string | undefined
   try {
-    const response = await fetch(CLIMBING_METADATA_URL)
+    const response = await fetch(CLIMBING_METADATA_URL, { signal: AbortSignal.timeout(5000) })
     if (response.ok) {
       const metadata = (await response.json()) as { updated?: string; maxRank?: number }
       if (Number.isFinite(metadata.maxRank)) maxRank = metadata.maxRank!

@@ -45,6 +45,8 @@ export interface Problem {
   lat: number
   font: string
   hueco: string
+  /** All grade tags, including scales rendered in neutral gray. */
+  grades: Record<string, string>
   image: string
   path: string
   description: string
@@ -64,6 +66,7 @@ export interface PlaceEntry {
   lat: number
   font?: string
   hueco?: string
+  grades?: Record<string, string>
   /** Ancestor names, root -> immediate parent (excludes the entry itself). */
   path: string[]
   /** Display label for the kind: Area, Boulder, Sector or Problem. */
@@ -83,7 +86,7 @@ export interface Hierarchy {
 
 type AreaRow = [number, string, number, number, number | null, number | null, number[], number[], number]
 type SectorRow = [number, string, number, number | null, number | null, string | null, number[]]
-type ProblemRow = [string, number, number, number, number, string, string, string, string, string, string, string, string, string]
+type ProblemRow = [string, number, number, number, number, string, string, string, string, string, string, string, string, string, Record<string, string>?]
 
 interface RawIndex {
   version: number
@@ -115,7 +118,9 @@ export function parseHierarchy(raw: RawIndex): Hierarchy {
   const problems: Problem[] = raw.problems.map(row => ({
     name: row[0], id: row[1], sector: row[2], lon: row[3], lat: row[4],
     font: row[5], hueco: row[6], image: row[7], path: row[8],
-    description: row[9], fa: row[10], length: row[11], url: row[12], start: row[13]
+    description: row[9], fa: row[10], length: row[11], url: row[12], start: row[13],
+    // The extra field is optional so existing snapshots remain readable.
+    grades: { ...row[14], ...(row[5] ? { 'climbing:grade:font': row[5] } : {}), ...(row[6] ? { 'climbing:grade:hueco': row[6] } : {}) }
   }))
 
   const areaById = new Map(areas.map(area => [area.id, area]))
@@ -167,6 +172,7 @@ export function parseHierarchy(raw: RawIndex): Hierarchy {
       name: problem.name, norm: normalize(problem.name), kind: 'p', osm: 'n',
       id: problem.id, lon: problem.lon, lat: problem.lat,
       font: problem.font || undefined, hueco: problem.hueco || undefined,
+      grades: problem.grades,
       path, groupLabel: groupLabelFor('p', false)
     })
   }

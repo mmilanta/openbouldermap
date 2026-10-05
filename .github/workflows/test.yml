@@ -5,16 +5,18 @@ on:
     paths:
       - 'src/**'
       - 'tests/**'
+      - 'scripts/**'
       - 'package*.json'
       - 'tsconfig.json'
       - 'vite.config.ts'
       - 'index.html'
       - '.github/workflows/test.yml'
   push:
-    branches: [main]
+    branches: [main, master]
     paths:
       - 'src/**'
       - 'tests/**'
+      - 'scripts/**'
       - 'package*.json'
       - 'tsconfig.json'
       - 'vite.config.ts'

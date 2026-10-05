@@ -102,6 +102,15 @@ def centroid(coords: list[tuple[float, float]]) -> tuple[float, float] | None:
     return (sum(c[0] for c in coords) / len(coords), sum(c[1] for c in coords) / len(coords))
 
 
+def point_in_ring(point: list[float], ring: list[list[float]]) -> bool:
+    x, y = point
+    inside = False
+    for a, b in zip(ring, ring[1:]):
+        if (a[1] > y) != (b[1] > y) and x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]:
+            inside = not inside
+    return inside
+
+
 def main() -> None:
     sectors_out = Path(sys.argv[1]) if len(sys.argv) > 1 else SECTORS_OUT
     boulders_out = Path(sys.argv[2]) if len(sys.argv) > 2 else BOULDERS_OUT
@@ -263,13 +272,14 @@ def main() -> None:
             round(lon, 5), round(lat, 5),
             tags.get("climbing:grade:font", ""),
             tags.get("climbing:grade:hueco", ""),
-            tags.get("wikimedia_commons", ""),
+            tags.get("wikimedia_commons") or tags.get("image", ""),
             tags.get("wikimedia_commons:path", ""),
             tags.get("description", ""),
             tags.get("climbing:fa", tags.get("fa", "")),
             tags.get("climbing:length", ""),
             tags.get("url", ""),
             tags.get("climbing:start", ""),
+            {key: value for key, value in sorted(tags.items()) if key.startswith("climbing:grade:")},
         ])
 
     # ---- area / sector rows + geojson points --------------------------
@@ -422,8 +432,13 @@ def main() -> None:
                     rock_features.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(p[0], 6), round(p[1], 6)]}, "properties": props})
                 continue
             polygons = [[o] for o in outers]
+            for inner in inners:
+                owners = [polygon for polygon in polygons if point_in_ring(inner[0], polygon[0])]
+                if len(owners) == 1:
+                    owners[0].append(inner)
+                else:
+                    print(f"warning: rock relation {mid} has an inner ring without a unique outer ring", file=sys.stderr)
             if len(polygons) == 1:
-                polygons[0].extend(inners)
                 geom = {"type": "Polygon", "coordinates": polygons[0]}
             else:
                 geom = {"type": "MultiPolygon", "coordinates": polygons}

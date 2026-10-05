@@ -1,6 +1,6 @@
 // Editor-only interactive photo path drawing. Kept out of the shared photos
 // module so the viewer bundle never downloads the path editor.
-import { wikimediaUrl, type PathPoint } from '../photos'
+import { pathSegments, wikimediaUrl, type PathPoint } from '../photos'
 
 /** Serialize points back to the OpenClimbing path string. */
 export function stringifyPath(points: PathPoint[]): string {
@@ -53,7 +53,6 @@ export function createPathEditor(
   // --- image ---
   const img = document.createElement('img')
   img.className = 'editor-img'
-  img.src = wikimediaUrl(imageFilename, 1200)
   img.alt = 'Boulder photo'
 
   // --- SVG overlay ---
@@ -67,20 +66,26 @@ export function createPathEditor(
 
   // prevent background scrolling
   const scrollY = window.scrollY
+  const previousOverflow = document.body.style.overflow
   document.body.style.overflow = 'hidden'
+  let resizeObserver: ResizeObserver | undefined
+  let closed = false
   const cleanup = () => {
+    closed = true
+    document.removeEventListener('keydown', onKey)
+    resizeObserver?.disconnect()
     backdrop.remove()
-    document.body.style.overflow = ''
+    document.body.style.overflow = previousOverflow
     window.scrollTo(0, scrollY)
   }
 
   const wrappedCallbacks: EditorCallbacks = {
-    onDone: (pts) => { cleanup(); callbacks.onDone(pts) },
-    onCancel: () => { cleanup(); callbacks.onCancel() },
+    onDone: (pts) => { if (!closed) { cleanup(); callbacks.onDone(pts) } },
+    onCancel: () => { if (!closed) { cleanup(); callbacks.onCancel() } },
   }
 
   // --- state ---
-  let points: PathPoint[] = initialPoints.map(p => ({ ...p, dotted: false }))
+  let points: PathPoint[] = initialPoints.map(p => ({ ...p }))
   let imgW = 0
   let imgH = 0
 
@@ -115,15 +120,16 @@ export function createPathEditor(
       svg.appendChild(line)
     }
 
-    if (points.length > 1) {
+    for (const run of pathSegments(points)) {
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline')
-      const pts = points.map(p => `${p.x * imgW},${p.y * imgH}`).join(' ')
+      const pts = run.points.map(p => `${p.x * imgW},${p.y * imgH}`).join(' ')
       line.setAttribute('points', pts)
       line.setAttribute('stroke', '#e53935')
       line.setAttribute('stroke-width', '4')
       line.setAttribute('stroke-linecap', 'round')
       line.setAttribute('stroke-linejoin', 'round')
       line.setAttribute('fill', 'none')
+      if (run.dotted) line.setAttribute('stroke-dasharray', '8 6')
       svg.appendChild(line)
     }
 
@@ -160,8 +166,8 @@ export function createPathEditor(
 
   // keep overlay aligned on resize
   if (typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver(() => syncOverlay())
-    ro.observe(img)
+    resizeObserver = new ResizeObserver(() => syncOverlay())
+    resizeObserver.observe(img)
   }
 
   // click → add point
@@ -214,5 +220,7 @@ export function createPathEditor(
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') wrappedCallbacks.onCancel()
   }
-  document.addEventListener('keydown', onKey, { once: true })
+  document.addEventListener('keydown', onKey)
+  // Register handlers before requesting the image, including cached images.
+  img.src = wikimediaUrl(imageFilename, 1200)
 }

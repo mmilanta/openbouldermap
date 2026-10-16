@@ -1,7 +1,8 @@
 import * as maplibregl from 'maplibre-gl'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { Protocol } from 'pmtiles'
-import { CLIMBING_METADATA_URL, INITIAL_VIEW } from './config'
+import { CLIMBING_METADATA_URL, CLIMBING_PMTILES_URL, INITIAL_VIEW } from './config'
+import { recoverSourceOnFailure, resilientProtocol } from './pmtilesProtocol'
 import { buildStyle, AREA_LABEL_LAYERS } from './style'
 import { openArea, openBoulder, openProblem, hideSidebar, setNavigator } from './sidebar'
 import { isEditMode } from './editMode'
@@ -10,8 +11,9 @@ import { setSelectionMap } from './selection'
 import { initBackgroundControl } from './background'
 
 // Register the pmtiles:// protocol so MapLibre can read our static archive.
+// Transient network failures are retried; see src/pmtilesProtocol.ts.
 const protocol = new Protocol({ metadata: true })
-maplibregl.addProtocol('pmtiles', protocol.tile as any)
+maplibregl.addProtocol('pmtiles', resilientProtocol(protocol) as any)
 
 // Explicitly point MapLibre at its worker. Without this, Vite's dep optimizer
 // resolves the worker relative to the pre-bundled module (node_modules/.vite/deps)
@@ -49,6 +51,7 @@ async function start(): Promise<void> {
   })
 
   setSelectionMap(map)
+  recoverSourceOnFailure(map, 'climbing', CLIMBING_PMTILES_URL)
   initBackgroundControl(map)
 
   // The update date belongs in the attribution bar rather than in a separate

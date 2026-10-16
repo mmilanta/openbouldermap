@@ -251,9 +251,10 @@ relation.
    conclusion, so it is corrected to the consensus model:
    * each `climbing=boulder` container → **`climbing=crag`** (the boulder *is* the crag),
    * each parent `climbing=crag` that grouped boulders → **`climbing=area`**.
-4. Migration/repair scripts: `scripts/generate-boulder-restructure.py` (dispatch),
-   `scripts/fix-boulder-restructure.py` (completes the first partial changeset),
-   and the correction changeset described in `changes/`.
+4. Migration/repair scripts (archived, already applied):
+   `archive/scripts/generate-boulder-restructure.py` (dispatch),
+   `archive/scripts/fix-boulder-restructure.py` (completes the first partial changeset),
+   and the correction changeset described in `archive/changes/`.
 
 ---
 

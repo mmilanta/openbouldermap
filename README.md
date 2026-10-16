@@ -18,8 +18,8 @@ Use the bottom-left background selector to switch between **Street map** and
 **Satellite imagery** (Esri) in both the viewer and editor. Climbing features
 remain visible, and the browser remembers your choice across both views.
 
-See [`requirements.md`](requirements.md) for the original spec and
-[`idea.md`](idea.md) for the brainstorm.
+Historical notes (original spec, brainstorms, already-applied OSM migration
+changesets and scripts) live in [`docs/archive/`](docs/archive/).
 
 ## Stack
 
@@ -30,27 +30,25 @@ See [`requirements.md`](requirements.md) for the original spec and
 
 ## Prerequisites
 
-- Java ≥ 17 (planetiler)
-- [`osmium`](https://osmcode.org/osmium-tool/) (to filter OSM extracts)
-- Node ≥ 18 (Vite)
-- Inputs (not vendored):
-  - `planetiler.jar` (at repo root, see [planetiler releases](https://github.com/onthegomap/planetiler/releases))
-  - An OSM PBF: the full planet (~95 GB) or a continent extract from [Geofabrik](https://download.geofabrik.de/)
+- Java ≥ 21 (planetiler 0.10.2)
+- [`osmium`](https://osmcode.org/osmium-tool/), `curl`, `python3`
+- Node ≥ 22 (Vite 8)
+- `planetiler.jar` at the repo root (not vendored; `make planetiler.jar` fetches
+  the same pinned version CI uses)
 
 ## Build & run
 
-```bash
-# 1. Build the climbing PMTiles from an OSM PBF
-#    Download the planet (or a continent extract) first:
-#      curl -Lo data/planet.osm.pbf https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf
-#    Or grab a continent:
-#      curl -Lo data/europe.osm.pbf https://download.geofabrik.de/europe-latest.osm.pbf
-bash scripts/build-climbing-tiles.sh data/planet.osm.pbf     # or path to your PBF
+The `Makefile` mirrors the daily CI job (`.github/workflows/update-data.yml`):
 
-# 2. Start the app
-npm install        # first time only
-npm run dev        # http://localhost:5173
+```bash
+make download   # worldwide climbing data from Overpass -> data/overpass-climbing.osm.pbf (a few MB)
+make tiles      # -> tiles/climbing.pmtiles, climbing-index.json, climbing-metadata.json
+make serve      # http://localhost:5173
+make test       # typecheck + unit tests
 ```
+
+`make tiles PBF=data/europe.osm.pbf` builds from any local OSM PBF (e.g. a
+[Geofabrik](https://download.geofabrik.de/) extract) instead of Overpass data.
 
 `npm run build` + `npm run preview` serves the production bundle.
 
@@ -98,7 +96,7 @@ scale there to surface it in the viewer.
 The desktop-first editor is available under `/edit`. There is no on-page entry
 button: navigate directly to `/edit` to open it. The editor is code-split from
 the viewer, so read-only visitors never download or run it. The agreed scope is
-in [`editor-feature-request.md`](editor-feature-request.md).
+in [`docs/archive/editor-feature-request.md`](docs/archive/editor-feature-request.md).
 
 ### Geometry and details
 
@@ -190,7 +188,7 @@ and discard. `BROWSER_EXECUTABLE` can select an existing Chromium installation;
 
 ## Data model
 
-See [`data-schema.md`](data-schema.md) for the full model, or the published
+See [`docs/data-schema.md`](docs/data-schema.md) for the full model, or the published
 [wiki](https://openbouldermap.org/wiki) for the reader-friendly
 version. In short:
 

@@ -6,9 +6,10 @@
 #   bash scripts/build-climbing-tiles.sh [source ...]
 #
 #   Each source can be:
-#     - A local .osm.pbf file (e.g. data/switzerland.osm.pbf)
+#     - A local .osm.pbf file (e.g. data/overpass-climbing.osm.pbf)
 #     - A URL (https://...) — downloaded temporarily, filtered, then deleted
-#     - Omitted — uses data/switzerland.osm.pbf
+#     - Omitted — uses data/overpass-climbing.osm.pbf (see
+#       scripts/download-overpass-climbing.sh, same as the daily CI job)
 #
 # Multiple filtered extracts are merged before tile generation. This lets CI
 # process Geofabrik's continent extracts one at a time without needing enough
@@ -23,7 +24,7 @@ cd "$REPO"
 if (( $# )); then
   SOURCES=("$@")
 else
-  SOURCES=(data/switzerland.osm.pbf)
+  SOURCES=(data/overpass-climbing.osm.pbf)
 fi
 FILTERED="data/climbing-filtered.osm.pbf"
 OUTPUT="tiles/climbing.pmtiles"
